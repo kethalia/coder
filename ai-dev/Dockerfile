@@ -116,5 +116,8 @@ RUN echo 'export PGHOST=localhost' >> ~/.zshrc \
     && echo 'export PGUSER=coder' >> ~/.zshrc \
     && echo 'export PGDATABASE=coder' >> ~/.zshrc
 
-# Add PATH to .bashrc so bash -l commands (coder_app) can find tools
-RUN echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/share/pnpm:$HOME/.bun/bin:$HOME/.foundry/bin:$PATH"' >> ~/.bashrc
+# Add PATH to shell profiles so all shells (bash, zsh, sh) and AI agent subprocesses can find tools
+RUN TOOL_PATH='export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/share/pnpm:$HOME/.bun/bin:$HOME/.foundry/bin:$PATH"' \
+    && echo "$TOOL_PATH" >> ~/.bashrc \
+    && echo "$TOOL_PATH" >> ~/.profile \
+    && echo "$TOOL_PATH" >> ~/.zprofile
