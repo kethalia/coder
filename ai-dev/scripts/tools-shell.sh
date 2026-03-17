@@ -56,6 +56,11 @@ disabled = true
 STARSHIPEOF
 fi
 
+# Remove Oh My Zsh git plugin aliases that conflict with our tools
+# Place in custom/ dir so it loads AFTER plugins (including git plugin)
+mkdir -p "$HOME/.oh-my-zsh/custom"
+echo 'unalias gsd 2>/dev/null' > "$HOME/.oh-my-zsh/custom/unalias-gsd.zsh"
+
 # Append shell config only if not already present (idempotency guard)
 if ! grep -q '# Custom aliases' "$HOME/.zshrc" 2>/dev/null; then
   cat >> $HOME/.zshrc << 'ZSHEOF'
@@ -77,3 +82,5 @@ eval "$(direnv hook zsh)"
 eval "$(starship init zsh)"
 ZSHEOF
 fi
+
+exit 0
