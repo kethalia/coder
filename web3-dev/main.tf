@@ -458,7 +458,7 @@ resource "coder_script" "development_tools" {
   display_name       = "Development Tools"
   icon               = "/icon/terminal.svg"
   run_on_start       = true
-  start_blocks_login = true
+  start_blocks_login = false
 
   script = <<EOT
     #!/bin/bash
@@ -589,10 +589,10 @@ resource "docker_volume" "home_volume" {
 resource "docker_image" "main" {
   name = "coder-${data.coder_workspace.me.id}"
   build {
-    context = "./build"
+    context = "."
   }
   triggers = {
-    dir_sha1 = sha1(join("", [for f in fileset(path.module, "build/*") : filesha1(f)]))
+    dir_sha1 = sha1(join("", [for f in fileset(path.module, "Dockerfile") : filesha1(f)]))
   }
 }
 

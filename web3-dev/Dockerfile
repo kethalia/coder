@@ -66,6 +66,21 @@ ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install act (run GitHub Actions locally)
+RUN wget -qO /tmp/act.tar.gz https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz \
+    && tar xf /tmp/act.tar.gz -C /usr/local/bin act \
+    && rm /tmp/act.tar.gz
+
 # Create coder user with proper groups
 RUN userdel -r ubuntu \
     && useradd coder \
