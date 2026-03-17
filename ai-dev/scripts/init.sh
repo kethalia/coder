@@ -86,6 +86,9 @@ EOFREADME
   echo "Workspace initialized"
 fi
 
+# Ensure tools are on PATH (prepend without overriding agent PATH)
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/share/pnpm:$HOME/.bun/bin:$HOME/.foundry/bin:$PATH"
+
 # Per-start initialization
 echo "Starting workspace services..."
 

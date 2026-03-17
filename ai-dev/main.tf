@@ -133,9 +133,6 @@ resource "coder_agent" "main" {
     GIT_COMMITTER_EMAIL = "${data.coder_workspace_owner.me.email}"
 
     EXTENSIONS_GALLERY = "{\"serviceUrl\":\"https://marketplace.visualstudio.com/_apis/public/gallery\"}"
-
-    # Ensure all tools are on PATH for non-interactive shells (AI agents, subprocesses)
-    PATH = "/home/coder/.local/bin:/home/coder/.opencode/bin:/home/coder/.local/share/pnpm:/home/coder/.bun/bin:/home/coder/.foundry/bin:/usr/local/bin:/usr/bin:/bin"
   }
 
   metadata {
