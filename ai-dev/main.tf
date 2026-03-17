@@ -401,25 +401,51 @@ module "code-server" {
 # OpenCode
 # =============================================================================
 
-module "opencode" {
-  source       = "registry.coder.com/coder-labs/opencode/coder"
-  version      = "0.1.1"
-  agent_id     = coder_agent.main.id
-  workdir      = "/home/coder"
-  report_tasks = true
-  cli_app      = true
-  config_json = var.opencode_config_json != "" ? var.opencode_config_json : jsonencode({
-    "$schema" = "https://opencode.ai/config.json"
-    permission = {
-      skill = {
-        "*"              = "allow"
-        "pr-review"      = "allow"
-        "internal-*"     = "deny"
-        "experimental-*" = "ask"
+resource "coder_script" "opencode_install" {
+  agent_id           = coder_agent.main.id
+  display_name       = "OpenCode Install"
+  icon               = "/icon/opencode.svg"
+  run_on_start       = true
+  start_blocks_login = true
+
+  script = <<EOT
+    #!/bin/bash
+    set -e
+
+    # Install OpenCode if not present
+    if ! command -v opencode &> /dev/null && [ ! -f "$HOME/.opencode/bin/opencode" ]; then
+      echo "Installing OpenCode..."
+      curl -fsSL https://opencode.ai/install | bash
+    else
+      echo "OpenCode already installed"
+    fi
+
+    # Write OpenCode config
+    mkdir -p "$HOME/.config/opencode"
+    CONFIG_JSON='${var.opencode_config_json != "" ? var.opencode_config_json : jsonencode({
+      "$schema" = "https://opencode.ai/config.json"
+      permission = {
+        skill = {
+          "*"              = "allow"
+          "pr-review"      = "allow"
+          "internal-*"     = "deny"
+          "experimental-*" = "ask"
+        }
       }
-    }
-    model = var.opencode_model
-  })
+      model = var.opencode_model
+    })}'
+    echo "$CONFIG_JSON" > "$HOME/.config/opencode/config.json"
+    echo "OpenCode configured"
+  EOT
+}
+
+resource "coder_app" "opencode_terminal" {
+  agent_id     = coder_agent.main.id
+  slug         = "opencode-terminal"
+  display_name = "OpenCode"
+  icon         = "/icon/opencode.svg"
+  command      = "bash -l -c 'export PATH=\"$HOME/.opencode/bin:$PATH\" && opencode'"
+  share        = "owner"
 }
 
 resource "coder_app" "opencode_ui" {
@@ -443,10 +469,9 @@ resource "coder_script" "opencode_serve" {
     #!/bin/bash
     set -e
 
-    # Add opencode install path to PATH
-    export PATH="/home/coder/.opencode/bin:$PATH"
+    export PATH="/home/coder/.opencode/bin:$HOME/.local/bin:$PATH"
 
-    # Wait for opencode to be installed by the module
+    # Wait for opencode to be installed
     max_attempts=30
     attempt=0
     while ! command -v opencode &> /dev/null; do
@@ -456,7 +481,7 @@ resource "coder_script" "opencode_serve" {
         exit 1
       fi
       echo "Waiting for opencode CLI to be installed... (attempt $attempt/$max_attempts)"
-      sleep 60
+      sleep 10
     done
 
     echo "Starting opencode serve on port 62748..."
@@ -468,20 +493,42 @@ resource "coder_script" "opencode_serve" {
 # Claude Code
 # =============================================================================
 
-module "claude-code" {
-  source   = "registry.coder.com/coder/claude-code/coder"
-  version  = ">= 1.0.0"
-  agent_id = coder_agent.main.id
-  workdir  = "/home/coder"
+resource "coder_script" "claude_code_install" {
+  agent_id           = coder_agent.main.id
+  display_name       = "Claude Code Install"
+  icon               = "/icon/claude.svg"
+  run_on_start       = true
+  start_blocks_login = true
 
-  install_claude_code = true
-  cli_app             = true
-  report_tasks        = true
+  script = <<EOT
+    #!/bin/bash
+    set -e
 
-  model          = var.claude_code_model
-  claude_api_key = var.claude_code_api_key
-  system_prompt  = var.claude_code_system_prompt
-  allowed_tools  = var.claude_code_allowed_tools
+    export PATH="$HOME/.local/bin:$PATH"
+
+    # Install Claude Code if not present
+    if ! command -v claude &> /dev/null; then
+      echo "Installing Claude Code..."
+      curl -fsSL https://claude.ai/install.sh | sh
+    else
+      echo "Claude Code already installed"
+    fi
+
+    %{if var.claude_code_api_key != ""}
+    export ANTHROPIC_API_KEY="${var.claude_code_api_key}"
+    echo 'export ANTHROPIC_API_KEY="${var.claude_code_api_key}"' >> "$HOME/.bashrc"
+    grep -q 'ANTHROPIC_API_KEY' "$HOME/.zshrc" 2>/dev/null || echo 'export ANTHROPIC_API_KEY="${var.claude_code_api_key}"' >> "$HOME/.zshrc"
+    %{endif}
+  EOT
+}
+
+resource "coder_app" "claude_code" {
+  agent_id     = coder_agent.main.id
+  slug         = "claude-code"
+  display_name = "Claude Code"
+  icon         = "/icon/claude.svg"
+  command      = "bash -l -c 'export PATH=\"$HOME/.local/bin:$PATH\" && claude'"
+  share        = "owner"
 }
 
 # =============================================================================
@@ -493,7 +540,7 @@ resource "coder_app" "pi" {
   slug         = "pi"
   display_name = "Pi Agent"
   icon         = "/icon/terminal.svg"
-  command      = "pi"
+  command      = "bash -l -c pi"
   share        = "owner"
 }
 
