@@ -69,7 +69,6 @@ alias gp="git pull"
 alias gc="git commit"
 alias gco="git checkout"
 alias ll="ls -lah"
-alias k="kubectl"
 
 # Direnv hook
 eval "$(direnv hook zsh)"

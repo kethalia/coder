@@ -126,14 +126,17 @@ resource "coder_agent" "main" {
     owner_email    = data.coder_workspace_owner.me.email
   })
 
-  env = {
-    GIT_AUTHOR_NAME     = coalesce(data.coder_workspace_owner.me.full_name, data.coder_workspace_owner.me.name)
-    GIT_AUTHOR_EMAIL    = "${data.coder_workspace_owner.me.email}"
-    GIT_COMMITTER_NAME  = coalesce(data.coder_workspace_owner.me.full_name, data.coder_workspace_owner.me.name)
-    GIT_COMMITTER_EMAIL = "${data.coder_workspace_owner.me.email}"
+  env = merge(
+    {
+      GIT_AUTHOR_NAME     = coalesce(data.coder_workspace_owner.me.full_name, data.coder_workspace_owner.me.name)
+      GIT_AUTHOR_EMAIL    = "${data.coder_workspace_owner.me.email}"
+      GIT_COMMITTER_NAME  = coalesce(data.coder_workspace_owner.me.full_name, data.coder_workspace_owner.me.name)
+      GIT_COMMITTER_EMAIL = "${data.coder_workspace_owner.me.email}"
 
-    EXTENSIONS_GALLERY = "{\"serviceUrl\":\"https://marketplace.visualstudio.com/_apis/public/gallery\"}"
-  }
+      EXTENSIONS_GALLERY = "{\"serviceUrl\":\"https://marketplace.visualstudio.com/_apis/public/gallery\"}"
+    },
+    var.claude_code_api_key != "" ? { ANTHROPIC_API_KEY = var.claude_code_api_key } : {}
+  )
 
   metadata {
     display_name = "CPU Usage"
@@ -275,7 +278,7 @@ resource "coder_script" "symlinks" {
 module "code-server" {
   count   = data.coder_workspace.me.start_count
   source  = "registry.coder.com/modules/code-server/coder"
-  version = ">= 1.0.0"
+  version = "1.2.0"
 
   agent_id              = coder_agent.main.id
   order                 = 1

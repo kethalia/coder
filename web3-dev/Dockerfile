@@ -113,7 +113,6 @@ RUN echo '' >> ~/.zshrc \
     && echo 'alias gc="git commit"' >> ~/.zshrc \
     && echo 'alias gco="git checkout"' >> ~/.zshrc \
     && echo 'alias ll="ls -lah"' >> ~/.zshrc \
-    && echo 'alias k="kubectl"' >> ~/.zshrc \
     && echo '' >> ~/.zshrc \
     && echo '# Add local bin to PATH' >> ~/.zshrc \
     && echo 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"' >> ~/.zshrc

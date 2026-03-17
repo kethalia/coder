@@ -119,11 +119,8 @@ git lg                       # Pretty log
 \`\`\`
 
 ### 🗄️ Database Information
-- **Host**: localhost
-- **Database**: coder
-- **User**: coder
-- **Password**: coder
-- **Port**: 5432
+Connection is pre-configured via environment variables (\`PGHOST\`, \`PGUSER\`, \`PGDATABASE\`).
+Use \`psql\` to connect with no arguments.
 
 ### 📁 Directory Structure
 - \`~/projects/\` - Your project files
@@ -170,8 +167,17 @@ EOFREADME
     # Start opencode serve in background (waits for CLI to be installed by module)
     (
       export PATH="/home/coder/.opencode/bin:$PATH"
-      while ! command -v opencode &> /dev/null; do sleep 5; done
-      opencode serve --port 62748 > /tmp/opencode-serve.log 2>&1
+      max_attempts=30
+      attempt=0
+      while ! command -v opencode &> /dev/null; do
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "ERROR: opencode CLI not found after $max_attempts attempts" >> /tmp/opencode-serve.log
+          exit 1
+        fi
+        sleep 10
+      done
+      nohup opencode serve --port 62748 > /tmp/opencode-serve.log 2>&1 &
     ) &
 
     echo ""
@@ -266,7 +272,7 @@ data "coder_external_auth" "github" {
 module "code-server" {
   count   = data.coder_workspace.me.start_count
   source  = "registry.coder.com/modules/code-server/coder"
-  version = ">= 1.0.0"
+  version = "1.2.0"
 
   agent_id              = coder_agent.main.id
   order                 = 1
@@ -500,23 +506,8 @@ resource "coder_script" "development_tools" {
       foundryup
     '
 
-    # Install act (GitHub Actions locally)
-    install_if_missing "act" "act" "" '
-      wget -qO /tmp/act.tar.gz https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz &&
-      sudo tar xf /tmp/act.tar.gz -C /usr/local/bin act &&
-      rm /tmp/act.tar.gz
-    '
-
-    # Install GitHub CLI
-    install_if_missing "GitHub CLI" "gh" "" '
-      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg &&
-      sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg &&
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null &&
-      sudo apt-get update &&
-      sudo apt-get install gh -y
-    '
-
     # Configure GitHub CLI authentication using Coder external auth token
+    # (gh and act are pre-installed in the Dockerfile)
     if command_exists gh && [ -n "${data.coder_external_auth.github.access_token}" ]; then
       if ! gh auth status &>/dev/null; then
         printf "$${BOLD}🔐 Configuring GitHub CLI authentication...$${RESET}\n"

@@ -23,8 +23,6 @@ else
 fi
 
 %{if claude_api_key != ""}
+# API key is set via coder_agent env block — no need to persist to RC files
 export ANTHROPIC_API_KEY="${claude_api_key}"
-grep -q 'ANTHROPIC_API_KEY' "$HOME/.bashrc" 2>/dev/null || echo 'export ANTHROPIC_API_KEY="${claude_api_key}"' >> "$HOME/.bashrc"
-grep -q 'ANTHROPIC_API_KEY' "$HOME/.zshrc" 2>/dev/null || echo 'export ANTHROPIC_API_KEY="${claude_api_key}"' >> "$HOME/.zshrc"
-grep -q 'ANTHROPIC_API_KEY' "$HOME/.zshenv" 2>/dev/null || echo 'export ANTHROPIC_API_KEY="${claude_api_key}"' >> "$HOME/.zshenv"
 %{endif}
