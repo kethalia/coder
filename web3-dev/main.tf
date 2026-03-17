@@ -405,7 +405,8 @@ resource "coder_script" "opencode_serve" {
     done
 
     echo "Starting opencode serve on port 62748..."
-    opencode serve --port 62748 &
+    nohup opencode serve --port 62748 > /tmp/opencode-serve.log 2>&1 &
+    echo "opencode serve started (pid $!)"
   EOT
 }
 
