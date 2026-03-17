@@ -167,6 +167,13 @@ EOFREADME
     # Source shell configuration
     source ~/.zshrc 2>/dev/null || true
     
+    # Start opencode serve in background (waits for CLI to be installed by module)
+    (
+      export PATH="/home/coder/.opencode/bin:$PATH"
+      while ! command -v opencode &> /dev/null; do sleep 5; done
+      opencode serve --port 62748 > /tmp/opencode-serve.log 2>&1
+    ) &
+
     echo ""
     echo "✨ Workspace is ready! ✨"
     echo "📖 Check ~/README.md for quick start guide"
@@ -375,39 +382,6 @@ resource "coder_app" "opencode_ui" {
   icon         = "/icon/opencode.svg"
   subdomain    = true
   share        = "owner"
-}
-
-resource "coder_script" "opencode_serve" {
-  agent_id           = coder_agent.main.id
-  display_name       = "OpenCode Serve"
-  icon               = "/icon/opencode.svg"
-  run_on_start       = true
-  start_blocks_login = false
-
-  script = <<EOT
-    #!/bin/bash
-    set -e
-
-    # Add opencode install path to PATH
-    export PATH="/home/coder/.opencode/bin:$PATH"
-
-    # Wait for opencode to be installed by the module
-    max_attempts=30
-    attempt=0
-    while ! command -v opencode &> /dev/null; do
-      attempt=$((attempt + 1))
-      if [ "$attempt" -ge "$max_attempts" ]; then
-        echo "ERROR: opencode CLI not found after $max_attempts attempts"
-        exit 1
-      fi
-      echo "Waiting for opencode CLI to be installed... (attempt $attempt/$max_attempts)"
-      sleep 10
-    done
-
-    echo "Starting opencode serve on port 62748..."
-    nohup opencode serve --port 62748 > /tmp/opencode-serve.log 2>&1 &
-    echo "opencode serve started (pid $!)"
-  EOT
 }
 
 module "filebrowser" {
