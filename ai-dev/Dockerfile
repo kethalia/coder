@@ -31,6 +31,7 @@ RUN apt-get update \
         bash \
         build-essential \
         containerd.io \
+        direnv \
         docker-ce \
         docker-ce-cli \
         docker-buildx-plugin \
@@ -50,11 +51,18 @@ RUN apt-get update \
         rsync \
         software-properties-common \
         sudo \
+        tmux \
         unzip \
         vim \
         wget \
         zsh \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 24 via NodeSource (always available, no nvm dependency)
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable
 
 # Setup docker-compose symlink
 RUN systemctl enable docker
@@ -65,21 +73,6 @@ RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
-
-# Install GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update \
-    && apt-get install --yes --no-install-recommends gh \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install act (run GitHub Actions locally)
-RUN wget -qO /tmp/act.tar.gz https://github.com/nektos/act/releases/latest/download/act_Linux_x86_64.tar.gz \
-    && tar xf /tmp/act.tar.gz -C /usr/local/bin act \
-    && rm /tmp/act.tar.gz
 
 # Create coder user with proper groups
 RUN userdel -r ubuntu \
@@ -95,29 +88,24 @@ USER coder
 WORKDIR /home/coder
 
 # Create common directories
-RUN mkdir -p ~/projects ~/bin ~/.config ~/.ssh
+RUN mkdir -p ~/projects ~/bin ~/.config ~/.ssh ~/.local/bin
 
 # Setup basic git configuration that can be overridden
 RUN git config --global init.defaultBranch main \
     && git config --global pull.rebase false \
     && git config --global core.editor vim
 
-# Add helpful aliases to .zshrc (will be there when Oh My Zsh is installed)
-RUN echo '' >> ~/.zshrc \
-    && echo '# Custom aliases' >> ~/.zshrc \
-    && echo 'alias d="docker"' >> ~/.zshrc \
-    && echo 'alias dc="docker-compose"' >> ~/.zshrc \
-    && echo 'alias g="git"' >> ~/.zshrc \
-    && echo 'alias gs="git status"' >> ~/.zshrc \
-    && echo 'alias gp="git pull"' >> ~/.zshrc \
-    && echo 'alias gc="git commit"' >> ~/.zshrc \
-    && echo 'alias gco="git checkout"' >> ~/.zshrc \
-    && echo 'alias ll="ls -lah"' >> ~/.zshrc \
-    && echo '' >> ~/.zshrc \
-    && echo '# Add local bin to PATH' >> ~/.zshrc \
-    && echo 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"' >> ~/.zshrc
+# Setup .zshenv for PATH and env vars (survives Oh My Zsh .zshrc replacement)
+# .zshenv is sourced by ALL zsh invocations (interactive, non-interactive, login, non-login)
+RUN echo '# Tool PATH (set in .zshenv so it survives Oh My Zsh .zshrc replacement)' > ~/.zshenv \
+    && echo 'export PATH="$HOME/.claude/local/bin:$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/share/pnpm:$HOME/.bun/bin:$HOME/.foundry/bin:$HOME/bin:$PATH"' >> ~/.zshenv \
+    && echo '' >> ~/.zshenv \
+    && echo '# PostgreSQL' >> ~/.zshenv \
+    && echo 'export PGHOST=localhost' >> ~/.zshenv \
+    && echo 'export PGUSER=coder' >> ~/.zshenv \
+    && echo 'export PGDATABASE=coder' >> ~/.zshenv
 
-# Add PostgreSQL client configuration
-RUN echo 'export PGHOST=localhost' >> ~/.zshrc \
-    && echo 'export PGUSER=coder' >> ~/.zshrc \
-    && echo 'export PGDATABASE=coder' >> ~/.zshrc
+# Add PATH to .bashrc and .profile for bash -l commands (coder_app launchers)
+RUN TOOL_PATH='export PATH="$HOME/.claude/local/bin:$HOME/.local/bin:$HOME/.opencode/bin:$HOME/.local/share/pnpm:$HOME/.bun/bin:$HOME/.foundry/bin:$PATH"' \
+    && echo "$TOOL_PATH" >> ~/.bashrc \
+    && echo "$TOOL_PATH" >> ~/.profile
