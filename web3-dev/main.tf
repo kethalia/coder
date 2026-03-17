@@ -401,11 +401,11 @@ resource "coder_script" "opencode_serve" {
         exit 1
       fi
       echo "Waiting for opencode CLI to be installed... (attempt $attempt/$max_attempts)"
-      sleep 60
+      sleep 10
     done
 
     echo "Starting opencode serve on port 62748..."
-    opencode serve --port 62748 &
+    exec opencode serve --port 62748
   EOT
 }
 
