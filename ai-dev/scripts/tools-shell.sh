@@ -47,6 +47,15 @@ install_if_missing "Starship" "starship" "" '
   curl -sS https://starship.rs/install.sh | sh -s -- --yes
 '
 
+# Configure Starship — hide [Docker] container indicator
+mkdir -p "$HOME/.config"
+if [ ! -f "$HOME/.config/starship.toml" ]; then
+  cat > "$HOME/.config/starship.toml" << 'STARSHIPEOF'
+[container]
+disabled = true
+STARSHIPEOF
+fi
+
 # Re-append shell config that Oh My Zsh overwrote in .zshrc
 # (PATH is in .zshenv so it's safe, but aliases/hooks/prompt need to be in .zshrc)
 cat >> $HOME/.zshrc << 'ZSHEOF'
