@@ -506,19 +506,16 @@ module "git-config" {
 # Node.js
 # =============================================================================
 
-module "nodejs" {
-  count    = data.coder_workspace.me.start_count
-  source   = "registry.coder.com/thezoker/nodejs/coder"
-  version  = "1.0.11"
-  agent_id = coder_agent.main.id
-  node_versions = [
-    "18",
-    "20",
-    "22",
-    "24",
-    "node"
-  ]
-  default_node_version = "24"
+resource "coder_script" "tools_nvm" {
+  agent_id           = coder_agent.main.id
+  display_name       = "Node.js (nvm)"
+  icon               = "/icon/nodejs.svg"
+  run_on_start       = true
+  start_blocks_login = true
+  script = templatefile("${path.module}/scripts/tools-nvm.sh", {
+    node_versions        = join(" ", ["18", "20", "22", "24", "node"])
+    default_node_version = "24"
+  })
 }
 
 # =============================================================================
