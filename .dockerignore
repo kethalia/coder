@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.gsd
+ai-dev
+web3-dev
+hive-worker
+drizzle
+*.md
