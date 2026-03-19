@@ -43,8 +43,10 @@ done
 CLAUDE_MCP_DONE=false
 
 if command -v claude &>/dev/null; then
+  # Always remove first to clear stale config from previous builds
+  claude mcp remove playwright 2>/dev/null || true
   echo "Trying 'claude mcp add'..."
-  if claude mcp add playwright -- npx -y @playwright/mcp $MCP_ARGS_CLI 2>&1; then
+  if claude mcp add playwright -e DISPLAY=:99 -- npx -y @playwright/mcp $MCP_ARGS_CLI 2>&1; then
     CLAUDE_MCP_DONE=true
     printf "${GREEN}[ok] Claude Code MCP added via 'claude mcp add'${RESET}\n"
   else
