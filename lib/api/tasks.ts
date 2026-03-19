@@ -38,6 +38,7 @@ export async function createTask(input: {
       repoUrl: input.repoUrl,
       status: "queued",
       branch: branchName,
+      attachments: input.attachments ?? null,
     })
     .returning();
 

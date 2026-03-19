@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, timestamp, uuid, jsonb } from "drizzle-orm/pg-core";
 
 // --- Enums ---
 
@@ -31,6 +31,7 @@ export const tasks = pgTable("tasks", {
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  attachments: jsonb("attachments"),
 });
 
 export const taskLogs = pgTable("task_logs", {

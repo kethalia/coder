@@ -9,7 +9,7 @@ import { createTask, listTasks } from "@/lib/api/tasks";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, repoUrl } = body;
+    const { prompt, repoUrl, attachments } = body;
 
     if (!prompt || !repoUrl) {
       return NextResponse.json(
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const task = await createTask({ prompt, repoUrl });
+    const task = await createTask({ prompt, repoUrl, attachments });
     return NextResponse.json(task, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
