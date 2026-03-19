@@ -71,6 +71,10 @@ RUN apt-get update \
         libgtk-3-0 \
         libasound2t64 \
         xvfb \
+        x11vnc \
+        fluxbox \
+        novnc \
+        websockify \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 24 via NodeSource (always available, no nvm dependency)

@@ -271,6 +271,25 @@ resource "coder_script" "tools_browser" {
   script             = file("${path.module}/scripts/tools-browser.sh")
 }
 
+resource "coder_script" "browser_serve" {
+  agent_id           = coder_agent.main.id
+  display_name       = "Browser Vision Server"
+  icon               = "/icon/terminal.svg"
+  run_on_start       = true
+  start_blocks_login = false
+  script             = file("${path.module}/scripts/browser-serve.sh")
+}
+
+resource "coder_app" "browser_vision" {
+  agent_id     = coder_agent.main.id
+  slug         = "browser-vision"
+  display_name = "Browser"
+  url          = "http://localhost:6080/vnc.html?autoconnect=true&resize=remote"
+  icon         = "/icon/terminal.svg"
+  subdomain    = true
+  share        = "owner"
+}
+
 resource "coder_script" "symlinks" {
   agent_id           = coder_agent.main.id
   display_name       = "Tool Symlinks"

@@ -152,6 +152,7 @@ cpu_shares  = 6144    # 6 CPU cores (relative weight)
 | OpenCode UI | Subdomain (`:62748`) | Web interface for OpenCode |
 | Claude Code | Web app via module | Claude Code web interface |
 | Pi Agent | Terminal app | Pi in a terminal window |
+| Browser | Subdomain (`:6080`) | Watch AI agents interact with the browser |
 | File Browser | Subdomain | Web-based file management |
 
 ## Browser Vision
@@ -160,12 +161,18 @@ All AI agents can visually inspect what they're developing via a headless Chromi
 
 ### How It Works
 
+A virtual display (Xvfb) runs a headed Chromium browser that AI agents control via Playwright MCP. A noVNC web UI lets you watch the browser in real-time from the Coder dashboard.
+
 | Agent | Method | Capabilities |
 |-------|--------|--------------|
-| Claude Code | Playwright MCP server | Navigate, screenshot, click, type, inspect elements |
-| OpenCode | Playwright MCP server | Navigate, screenshot, click, type, inspect elements |
+| Claude Code | Playwright MCP server (headed) | Navigate, screenshot, click, type, inspect elements |
+| OpenCode | Playwright MCP server (headed) | Navigate, screenshot, click, type, inspect elements |
 | Pi | `browser-screenshot` / `browser-html` CLI tools | Screenshot any URL, dump rendered HTML |
 | GSD / GSD-2 | Inherits from parent agent | Same as Claude Code, OpenCode, or Pi |
+
+### Web App (noVNC)
+
+Open the **Browser** app in the Coder dashboard to watch AI agents interact with pages in real-time. The browser runs on a virtual display (`:99`) and is streamed via noVNC on port `6080`.
 
 ### Usage Examples
 
@@ -185,10 +192,12 @@ browser-html http://localhost:3000                    # Dump rendered DOM as tex
 
 ### Configuration
 
-The Playwright MCP server is auto-configured for Claude Code (`~/.claude/settings.json`) and OpenCode (`~/.config/opencode/config.json`) during workspace startup. Browser tools use the system Chromium at `/usr/bin/chromium-browser`.
+The Playwright MCP server is auto-configured for Claude Code (`~/.claude/settings.json`) and OpenCode (`~/.config/opencode/config.json`) during workspace startup. Agents run in **headed mode** on display `:99`, so all browser interactions are visible via the noVNC web app.
+
+Architecture: `Xvfb :99` → `fluxbox` (window manager) → `x11vnc` (VNC server) → `websockify + noVNC` (web UI on `:6080`)
 
 Environment variables:
-- `BROWSER_VIEWPORT` - Screenshot viewport size (default: `1280x720`)
+- `BROWSER_VIEWPORT` - Screenshot/display viewport size (default: `1280x720`)
 
 ## Troubleshooting
 

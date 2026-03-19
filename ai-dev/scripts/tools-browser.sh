@@ -25,27 +25,39 @@ fi
 export PLAYWRIGHT_BROWSERS_PATH=0
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
+# Playwright MCP config — runs headed on the virtual display so users can
+# watch via noVNC, with headless fallback if DISPLAY isn't available
+PLAYWRIGHT_MCP_ENV='{
+  "DISPLAY": ":99",
+  "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
+}'
+
 # Configure Claude Code MCP server for Playwright
 mkdir -p "$HOME/.claude"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+CLAUDE_MCP_BLOCK=$(cat << 'JQEOF'
+.mcpServers.playwright = {
+  "command": "npx",
+  "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
+  "env": {
+    "DISPLAY": ":99",
+    "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
+  }
+}
+JQEOF
+)
+
 if [ -f "$CLAUDE_SETTINGS" ]; then
-  # Merge playwright MCP into existing settings
   EXISTING=$(cat "$CLAUDE_SETTINGS")
-  echo "$EXISTING" | jq '.mcpServers.playwright = {
-    "command": "npx",
-    "args": ["-y", "@anthropic-ai/mcp-server-playwright", "--headless"],
-    "env": {
-      "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
-    }
-  }' > "$CLAUDE_SETTINGS" 2>/dev/null || {
-    # If jq merge fails (malformed JSON), write fresh config
+  echo "$EXISTING" | jq "$CLAUDE_MCP_BLOCK" > "$CLAUDE_SETTINGS" 2>/dev/null || {
     cat > "$CLAUDE_SETTINGS" << 'CLAUDEMCP'
 {
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-playwright", "--headless"],
+      "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
       "env": {
+        "DISPLAY": ":99",
         "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
       }
     }
@@ -59,8 +71,9 @@ else
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-playwright", "--headless"],
+      "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
       "env": {
+        "DISPLAY": ":99",
         "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
       }
     }
@@ -68,20 +81,26 @@ else
 }
 CLAUDEMCP
 fi
-printf "$${GREEN}[ok] Claude Code MCP configured for Playwright$${RESET}\n"
+printf "$${GREEN}[ok] Claude Code MCP configured for Playwright (headed on :99)$${RESET}\n"
 
 # Configure OpenCode MCP server for Playwright
 OPENCODE_CONFIG="$HOME/.config/opencode/config.json"
+OPENCODE_MCP_BLOCK=$(cat << 'JQEOF'
+.mcp.playwright = {
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
+  "env": {
+    "DISPLAY": ":99",
+    "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
+  }
+}
+JQEOF
+)
+
 if [ -f "$OPENCODE_CONFIG" ]; then
   EXISTING=$(cat "$OPENCODE_CONFIG")
-  echo "$EXISTING" | jq '.mcp.playwright = {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@anthropic-ai/mcp-server-playwright", "--headless"],
-    "env": {
-      "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
-    }
-  }' > "$OPENCODE_CONFIG" 2>/dev/null || {
+  echo "$EXISTING" | jq "$OPENCODE_MCP_BLOCK" > "$OPENCODE_CONFIG" 2>/dev/null || {
     printf "$${YELLOW}[warn] Could not merge MCP into OpenCode config, skipping$${RESET}\n"
   }
 else
@@ -92,8 +111,9 @@ else
     "playwright": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-playwright", "--headless"],
+      "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
       "env": {
+        "DISPLAY": ":99",
         "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
       }
     }
@@ -101,7 +121,7 @@ else
 }
 OPMCP
 fi
-printf "$${GREEN}[ok] OpenCode MCP configured for Playwright$${RESET}\n"
+printf "$${GREEN}[ok] OpenCode MCP configured for Playwright (headed on :99)$${RESET}\n"
 
 # Create screenshot helper script for Pi and GSD agents
 # Pi doesn't support MCP natively, so we provide a bash tool it can call
