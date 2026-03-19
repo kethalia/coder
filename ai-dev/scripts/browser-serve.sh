@@ -53,7 +53,7 @@ RC=$?
 if [ $RC -ne 0 ]; then
   echo "WARNING: KasmVNC failed to start (exit $RC):"
   cat "$LOG_DIR/kasmvnc.log" 2>/dev/null
-  echo "Browser vision server started successfully"
+  echo "Browser vision server failed — browser viewing will be unavailable"
   exit 0
 fi
 

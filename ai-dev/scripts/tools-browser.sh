@@ -45,7 +45,17 @@ fi
 
 if [ "$CLAUDE_MCP_DONE" = "false" ]; then
   mkdir -p "$HOME/.claude"
-  cat > "$HOME/.claude/settings.json" << 'SETTINGS'
+  CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+  if [ -f "$CLAUDE_SETTINGS" ] && command -v jq &>/dev/null; then
+    MERGED=$(jq '.mcpServers.playwright = {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp", "--no-sandbox"],
+      "env": {"DISPLAY": ":99"}
+    }' "$CLAUDE_SETTINGS" 2>/dev/null) && echo "$MERGED" > "$CLAUDE_SETTINGS" || {
+      printf "${YELLOW}[warn] Could not merge MCP into Claude settings.json${RESET}\n"
+    }
+  else
+    cat > "$CLAUDE_SETTINGS" << 'SETTINGS'
 {
   "mcpServers": {
     "playwright": {
@@ -58,6 +68,7 @@ if [ "$CLAUDE_MCP_DONE" = "false" ]; then
   }
 }
 SETTINGS
+  fi
   echo "Wrote Claude settings.json"
 fi
 

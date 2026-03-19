@@ -170,9 +170,9 @@ A virtual display (Xvfb) runs a headed Chromium browser that AI agents control v
 | Pi | `browser-screenshot` / `browser-html` CLI tools | Screenshot any URL, dump rendered HTML |
 | GSD / GSD-2 | Inherits from parent agent | Same as Claude Code, OpenCode, or Pi |
 
-### Web App (noVNC)
+### Web App (KasmVNC)
 
-Open the **Browser** app in the Coder dashboard to watch AI agents interact with pages in real-time. The browser runs on a virtual display (`:99`) and is streamed via noVNC on port `6080`.
+Open the **Browser** app in the Coder dashboard to watch AI agents interact with pages in real-time. The browser runs on a virtual display (`:99`) and is streamed via KasmVNC on port `6080`.
 
 ### Usage Examples
 
@@ -192,9 +192,9 @@ browser-html http://localhost:3000                    # Dump rendered DOM as tex
 
 ### Configuration
 
-The Playwright MCP server is auto-configured for Claude Code (`~/.claude/settings.json`) and OpenCode (`~/.config/opencode/config.json`) during workspace startup. Agents run in **headed mode** on display `:99`, so all browser interactions are visible via the noVNC web app.
+The Playwright MCP server is auto-configured for Claude Code (`~/.claude/settings.json`) and OpenCode (`~/.config/opencode/config.json`) during workspace startup. Agents run in **headed mode** on display `:99`, so all browser interactions are visible via the KasmVNC web app.
 
-Architecture: `Xvfb :99` → `fluxbox` (window manager) → `x11vnc` (VNC server) → `websockify + noVNC` (web UI on `:6080`)
+Architecture: `KasmVNC :99` (virtual display + VNC + web viewer on `:6080`) → `fluxbox` (window manager)
 
 Environment variables:
 - `BROWSER_VIEWPORT` - Screenshot/display viewport size (default: `1280x720`)
