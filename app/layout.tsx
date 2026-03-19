@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Geist, Geist_Mono } from "next/font/google";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Separator } from "@/components/ui/separator";
 import "./globals.css";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geistSans = Geist({
+  variable: "--font-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: "Hive Orchestrator",
@@ -17,30 +27,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className="bg-gray-950 text-gray-100 min-h-screen">
-        <nav className="sticky top-0 z-50 bg-gray-900 border-b border-gray-800">
-          <div className="mx-auto max-w-5xl flex items-center justify-between px-4 py-3">
-            <Link href="/tasks" className="text-lg font-bold tracking-tight text-white">
-              Hive
-            </Link>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/tasks"
-                className="text-sm text-gray-300 hover:text-white transition-colors"
-              >
-                Tasks
-              </Link>
-              <Link
-                href="/tasks/new"
-                className="text-sm text-gray-300 hover:text-white transition-colors"
-              >
-                New Task
-              </Link>
-            </div>
-          </div>
-        </nav>
-        <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+    <html lang="en" className="dark">
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+        <TooltipProvider>
+          <SidebarProvider>
+            <AppSidebar />
+            <SidebarInset>
+              <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+                <SidebarTrigger className="-ml-1" />
+                <Separator orientation="vertical" className="mr-2 h-4" />
+                <span className="text-sm text-muted-foreground">Dashboard</span>
+              </header>
+              <main className="flex-1 p-6">
+                {children}
+              </main>
+            </SidebarInset>
+          </SidebarProvider>
+        </TooltipProvider>
       </body>
     </html>
   );

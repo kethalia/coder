@@ -4,6 +4,13 @@ import { useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createTaskAction } from "@/lib/actions/tasks";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 interface Attachment {
   name: string;
@@ -58,11 +65,7 @@ export default function NewTaskPage() {
       );
     }
 
-    execute({
-      prompt,
-      repoUrl,
-      attachments,
-    });
+    execute({ prompt, repoUrl, attachments });
   }
 
   const serverError = result.serverError;
@@ -70,83 +73,87 @@ export default function NewTaskPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold text-white">New Task</h1>
+      <h1 className="text-2xl font-bold tracking-tight">New Task</h1>
 
       {/* Server error banner */}
       {serverError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-500/30 bg-red-900/30 p-4 text-sm text-red-300"
-        >
-          <p className="font-medium">Submission failed</p>
-          <p className="mt-1 text-red-400">{serverError}</p>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Submission failed</AlertTitle>
+          <AlertDescription>{serverError}</AlertDescription>
+        </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-gray-800 bg-gray-900 p-6">
-        {/* Prompt */}
-        <div className="space-y-1.5">
-          <label htmlFor="prompt" className="block text-sm font-medium text-gray-300">
-            Prompt <span className="text-red-400">*</span>
-          </label>
-          <textarea
-            id="prompt"
-            name="prompt"
-            required
-            rows={4}
-            placeholder="Describe what you want built..."
-            className="block w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-          />
-          {validationErrors?.prompt && (
-            <p className="text-xs text-red-400">{validationErrors.prompt._errors?.[0]}</p>
-          )}
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Task Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Prompt */}
+            <div className="space-y-2">
+              <Label htmlFor="prompt">
+                Prompt <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="prompt"
+                name="prompt"
+                required
+                rows={4}
+                placeholder="Describe what you want built..."
+              />
+              {validationErrors?.prompt && (
+                <p className="text-xs text-destructive">
+                  {validationErrors.prompt._errors?.[0]}
+                </p>
+              )}
+            </div>
 
-        {/* Repo URL */}
-        <div className="space-y-1.5">
-          <label htmlFor="repoUrl" className="block text-sm font-medium text-gray-300">
-            Repository URL <span className="text-red-400">*</span>
-          </label>
-          <input
-            id="repoUrl"
-            name="repoUrl"
-            type="url"
-            required
-            placeholder="https://github.com/org/repo"
-            className="block w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-          />
-          {validationErrors?.repoUrl && (
-            <p className="text-xs text-red-400">{validationErrors.repoUrl._errors?.[0]}</p>
-          )}
-        </div>
+            {/* Repo URL */}
+            <div className="space-y-2">
+              <Label htmlFor="repoUrl">
+                Repository URL <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="repoUrl"
+                name="repoUrl"
+                type="url"
+                required
+                placeholder="https://github.com/org/repo"
+              />
+              {validationErrors?.repoUrl && (
+                <p className="text-xs text-destructive">
+                  {validationErrors.repoUrl._errors?.[0]}
+                </p>
+              )}
+            </div>
 
-        {/* File Attachments */}
-        <div className="space-y-1.5">
-          <label htmlFor="attachments" className="block text-sm font-medium text-gray-300">
-            File Attachments <span className="text-gray-500">(optional)</span>
-          </label>
-          <input
-            id="attachments"
-            name="attachments"
-            type="file"
-            multiple
-            ref={fileInputRef}
-            className="block w-full text-sm text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-700 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gray-200 hover:file:bg-gray-600 file:transition-colors file:cursor-pointer"
-          />
-          <p className="text-xs text-gray-500">Attach any reference files for the task.</p>
-        </div>
+            {/* File Attachments */}
+            <div className="space-y-2">
+              <Label htmlFor="attachments">
+                File Attachments <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="attachments"
+                name="attachments"
+                type="file"
+                multiple
+                ref={fileInputRef}
+              />
+              <p className="text-xs text-muted-foreground">
+                Attach any reference files for the task.
+              </p>
+            </div>
 
-        {/* Submit */}
-        <div className="pt-2">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isPending ? "Submitting…" : "Create Task"}
-          </button>
-        </div>
-      </form>
+            {/* Submit */}
+            <div className="pt-2">
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Submitting…" : "Create Task"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

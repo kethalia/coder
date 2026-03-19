@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { getTaskAction } from "@/lib/actions/tasks";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AlertCircle, ArrowLeft, ExternalLink, GitBranch, Paperclip } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -45,23 +52,14 @@ interface Task {
   logs: TaskLog[];
 }
 
-// ── Status badge styling (matches task list page) ──────────────────
+// ── Status badge variant mapping ──────────────────────────────────
 
-const statusStyles: Record<string, string> = {
-  queued: "bg-blue-900/50 text-blue-300 ring-1 ring-blue-500/30",
-  running: "bg-yellow-900/50 text-yellow-300 ring-1 ring-yellow-500/30",
-  verifying: "bg-purple-900/50 text-purple-300 ring-1 ring-purple-500/30",
-  done: "bg-green-900/50 text-green-300 ring-1 ring-green-500/30",
-  failed: "bg-red-900/50 text-red-300 ring-1 ring-red-500/30",
-};
-
-const workspaceStatusStyles: Record<string, string> = {
-  pending: "bg-gray-800 text-gray-400",
-  starting: "bg-blue-900/50 text-blue-300 ring-1 ring-blue-500/30",
-  running: "bg-yellow-900/50 text-yellow-300 ring-1 ring-yellow-500/30",
-  stopped: "bg-gray-800 text-gray-400 ring-1 ring-gray-600/30",
-  deleted: "bg-gray-800 text-gray-500 ring-1 ring-gray-600/30",
-  failed: "bg-red-900/50 text-red-300 ring-1 ring-red-500/30",
+const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  queued: "secondary",
+  running: "default",
+  verifying: "outline",
+  done: "default",
+  failed: "destructive",
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -108,201 +106,217 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
 
   return (
     <div className="space-y-6">
-      {/* Navigation breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link
-          href="/tasks"
-          className="hover:text-white transition-colors"
-        >
-          ← Back to Tasks
-        </Link>
-        <span className="text-gray-600">·</span>
-        <span>
-          Tasks &gt; Task {shortId(task.id)}
-        </span>
+      {/* Navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/tasks">
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Back to Tasks
+          </Link>
+        </Button>
       </div>
 
       {/* Header */}
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold tracking-tight">
           Task {shortId(task.id)}
         </h1>
-        <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            statusStyles[task.status] ?? "bg-gray-800 text-gray-400"
-          }`}
-        >
+        <Badge variant={statusVariant[task.status] ?? "secondary"}>
           {task.status}
-        </span>
+        </Badge>
       </div>
 
       {/* Error alert */}
       {task.errorMessage && (
-        <div className="rounded-lg border border-red-500/30 bg-red-900/20 p-4">
-          <p className="text-sm font-medium text-red-400">Error</p>
-          <p className="mt-1 text-sm text-red-300">{task.errorMessage}</p>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{task.errorMessage}</AlertDescription>
+        </Alert>
       )}
 
       {/* Task info card */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-4">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-gray-500">
-          Task Info
-        </h2>
-
-        {/* Prompt */}
-        <div>
-          <p className="text-xs text-gray-500 mb-1">Prompt</p>
-          <p className="text-gray-200 whitespace-pre-wrap">{task.prompt}</p>
-        </div>
-
-        {/* Repo URL */}
-        <div>
-          <p className="text-xs text-gray-500 mb-1">Repository</p>
-          <a
-            href={task.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 underline text-sm font-mono"
-          >
-            {task.repoUrl}
-          </a>
-        </div>
-
-        {/* Branch */}
-        {task.branch && (
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Branch</p>
-            <p className="text-gray-300 font-mono text-sm">{task.branch}</p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Task Info
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Prompt */}
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Prompt</p>
+            <p className="text-foreground whitespace-pre-wrap">{task.prompt}</p>
           </div>
-        )}
 
-        {/* PR URL */}
-        {task.prUrl && (
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Pull Request</p>
+          {/* Repo URL */}
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Repository</p>
             <a
-              href={task.prUrl}
+              href={task.repoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 underline text-sm"
+              className="inline-flex items-center gap-1 text-sm font-mono text-primary hover:underline"
             >
-              {task.prUrl}
+              {task.repoUrl}
+              <ExternalLink className="h-3 w-3" />
             </a>
           </div>
-        )}
 
-        {/* Timestamps */}
-        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-800">
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Created</p>
-            <p className="text-sm text-gray-400">{formatTimestamp(task.createdAt)}</p>
+          {/* Branch */}
+          {task.branch && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Branch</p>
+              <p className="inline-flex items-center gap-1 text-sm font-mono text-foreground">
+                <GitBranch className="h-3 w-3 text-muted-foreground" />
+                {task.branch}
+              </p>
+            </div>
+          )}
+
+          {/* PR URL */}
+          {task.prUrl && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Pull Request</p>
+              <a
+                href={task.prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                {task.prUrl}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Timestamps */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Created</p>
+              <p className="text-sm">{formatTimestamp(task.createdAt)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Last Updated</p>
+              <p className="text-sm">{formatTimestamp(task.updatedAt)}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Last Updated</p>
-            <p className="text-sm text-gray-400">{formatTimestamp(task.updatedAt)}</p>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Attachments */}
       {task.attachments && task.attachments.length > 0 && (
-        <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-3">
-          <h2 className="text-sm font-medium uppercase tracking-wider text-gray-500">
-            Attachments
-          </h2>
-          <ul className="space-y-2">
-            {task.attachments.map((att, i) => (
-              <li
-                key={i}
-                className="flex items-center gap-3 text-sm text-gray-300"
-              >
-                <span className="inline-flex items-center rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-400 font-mono">
-                  {att.type}
-                </span>
-                <span>{att.name}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              Attachments
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {task.attachments.map((att, i) => (
+                <li
+                  key={i}
+                  className="flex items-center gap-3 text-sm"
+                >
+                  <Paperclip className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {att.type}
+                  </Badge>
+                  <span>{att.name}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
 
       {/* Workspaces */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-gray-500">
-          Workspaces
-        </h2>
-        {task.workspaces.length === 0 ? (
-          <p className="text-sm text-gray-500">No workspaces created yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {task.workspaces.map((ws) => (
-              <div
-                key={ws.id}
-                className="flex items-center justify-between rounded-lg border border-gray-800/50 bg-gray-800/30 px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-gray-400">
-                    {shortId(ws.id)}
-                  </span>
-                  <span className="text-sm text-gray-300">
-                    {ws.templateType}
-                  </span>
-                </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                    workspaceStatusStyles[ws.status] ?? "bg-gray-800 text-gray-400"
-                  }`}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Workspaces
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {task.workspaces.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No workspaces created yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {task.workspaces.map((ws) => (
+                <div
+                  key={ws.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
                 >
-                  {ws.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  <div className="flex items-center gap-3">
+                    <code className="text-xs text-muted-foreground">
+                      {shortId(ws.id)}
+                    </code>
+                    <span className="text-sm">{ws.templateType}</span>
+                  </div>
+                  <Badge variant={statusVariant[ws.status] ?? "secondary"}>
+                    {ws.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Logs timeline */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-gray-500">
-          Logs
-        </h2>
-        {task.logs.length === 0 ? (
-          <p className="text-sm text-gray-500">No log entries yet.</p>
-        ) : (
-          <div className="space-y-1">
-            {task.logs.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-start gap-3 py-1.5 text-sm"
-              >
-                <span className="shrink-0 text-xs text-gray-600 font-mono tabular-nums min-w-[140px]">
-                  {formatTimestamp(log.createdAt)}
-                </span>
-                <span
-                  className={
-                    log.level === "error"
-                      ? "text-red-400"
-                      : "text-gray-300"
-                  }
-                >
-                  {log.message}
-                </span>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Logs
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {task.logs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No log entries yet.</p>
+          ) : (
+            <ScrollArea className="h-[300px]">
+              <div className="space-y-1">
+                {task.logs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-start gap-3 py-1.5 text-sm"
+                  >
+                    <span className="shrink-0 text-xs text-muted-foreground font-mono tabular-nums min-w-[140px]">
+                      {formatTimestamp(log.createdAt)}
+                    </span>
+                    <span
+                      className={
+                        log.level === "error"
+                          ? "text-destructive"
+                          : "text-foreground"
+                      }
+                    >
+                      {log.message}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </ScrollArea>
+          )}
+        </CardContent>
+      </Card>
 
       {/* S06 Streaming Placeholder */}
-      <div className="rounded-xl border border-dashed border-gray-700 bg-gray-900/50 p-6">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-gray-500">
-          Live Agent Activity
-        </h2>
-        <p className="mt-2 text-sm text-gray-500">
-          Real-time agent streaming will be available in a future update.
-        </p>
-      </div>
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Live Agent Activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Real-time agent streaming will be available in a future update.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
