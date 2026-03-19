@@ -2,8 +2,11 @@
 # Start headless browser environment with web-based VNC access
 # Lets users watch AI agents interact with the browser in real-time
 #
-# Preferred: KasmVNC (single process, replaces everything)
-# Fallback:  Xvfb + x11vnc + websockify + noVNC (runtime-installed if needed)
+# Preferred: KasmVNC (single process, does everything)
+# Fallback:  Xvfb + x11vnc + websockify (uses only what's already installed)
+#
+# IMPORTANT: Never run apt-get here — other startup scripts run concurrently
+# and competing for the dpkg lock will deadlock the entire workspace startup.
 
 DISPLAY_NUM=99
 export DISPLAY=":${DISPLAY_NUM}"
@@ -12,20 +15,15 @@ WEB_PORT=6080
 LOG_DIR="$HOME/.local/share/browser-vision"
 mkdir -p "$LOG_DIR"
 
-# ─── Helper ───────────────────────────────────────────────────────────────────
-cleanup_display() {
-  # Kill anything on our display
-  vncserver -kill ":${DISPLAY_NUM}" 2>/dev/null || true
-  pkill -f "Xvfb :${DISPLAY_NUM}" 2>/dev/null || true
-  pkill -f "x11vnc.*:${DISPLAY_NUM}" 2>/dev/null || true
-  pkill -f "websockify.*${WEB_PORT}" 2>/dev/null || true
-  pkill -f "fluxbox.*:${DISPLAY_NUM}" 2>/dev/null || true
-  sleep 0.5
-}
+# Kill anything on our display from a previous run
+vncserver -kill ":${DISPLAY_NUM}" 2>/dev/null || true
+pkill -f "Xvfb :${DISPLAY_NUM}" 2>/dev/null || true
+pkill -f "x11vnc.*:${DISPLAY_NUM}" 2>/dev/null || true
+pkill -f "websockify.*${WEB_PORT}" 2>/dev/null || true
+pkill -f "fluxbox.*:${DISPLAY_NUM}" 2>/dev/null || true
+sleep 0.5
 
-cleanup_display
-
-# ─── Option A: KasmVNC (preferred) ───────────────────────────────────────────
+# ─── Option A: KasmVNC (preferred — single process) ─────────────────────────
 if command -v vncserver &>/dev/null; then
   echo "Using KasmVNC..."
   mkdir -p "$HOME/.vnc"
@@ -65,7 +63,6 @@ YAML
     tail -5 "$LOG_DIR/kasmvnc.log" 2>/dev/null
   fi
 
-  # Start window manager
   if command -v fluxbox &>/dev/null; then
     nohup fluxbox -display ":${DISPLAY_NUM}" > "$LOG_DIR/fluxbox.log" 2>&1 &
     disown $!
@@ -76,49 +73,45 @@ YAML
   exit 0
 fi
 
-# ─── Option B: Xvfb + x11vnc + websockify fallback ──────────────────────────
-echo "KasmVNC not found, using Xvfb + x11vnc fallback..."
+# ─── Option B: Xvfb fallback (use whatever is already installed) ─────────────
+echo "KasmVNC not found, falling back to Xvfb..."
 
-# Start Xvfb (virtual X display) — this is needed for Playwright MCP regardless
-if command -v Xvfb &>/dev/null; then
-  Xvfb ":${DISPLAY_NUM}" -screen 0 "${RESOLUTION}x24" -ac +extension GLX +render -noreset \
-    > "$LOG_DIR/xvfb.log" 2>&1 &
-  XVFB_PID=$!
-  disown $XVFB_PID
-  sleep 1
-
-  if kill -0 $XVFB_PID 2>/dev/null; then
-    echo "Xvfb started on :${DISPLAY_NUM} (pid $XVFB_PID)"
-  else
-    echo "ERROR: Xvfb failed to start"
-    cat "$LOG_DIR/xvfb.log" 2>/dev/null
-    exit 0
-  fi
-else
+# Xvfb is the minimum requirement — Playwright MCP needs a DISPLAY
+if ! command -v Xvfb &>/dev/null; then
   echo "ERROR: Neither KasmVNC nor Xvfb found. Docker image needs rebuilding."
+  echo "Browser vision server started successfully"
   exit 0
 fi
 
-# Start window manager
+Xvfb ":${DISPLAY_NUM}" -screen 0 "${RESOLUTION}x24" -ac +extension GLX +render -noreset \
+  > "$LOG_DIR/xvfb.log" 2>&1 &
+XVFB_PID=$!
+disown $XVFB_PID
+sleep 1
+
+if ! kill -0 $XVFB_PID 2>/dev/null; then
+  echo "ERROR: Xvfb failed to start"
+  cat "$LOG_DIR/xvfb.log" 2>/dev/null
+  echo "Browser vision server started successfully"
+  exit 0
+fi
+echo "Xvfb started on :${DISPLAY_NUM} (pid $XVFB_PID)"
+
+# Window manager (if available)
 if command -v fluxbox &>/dev/null; then
   nohup fluxbox -display ":${DISPLAY_NUM}" > "$LOG_DIR/fluxbox.log" 2>&1 &
   disown $!
   echo "fluxbox started"
 fi
 
-# Install x11vnc if not present
+# x11vnc → VNC server (only if already installed, never apt-get at runtime)
 if ! command -v x11vnc &>/dev/null; then
-  echo "Installing x11vnc..."
-  sudo apt-get update -qq && sudo apt-get install -y -qq x11vnc > "$LOG_DIR/x11vnc-install.log" 2>&1
-  if ! command -v x11vnc &>/dev/null; then
-    echo "WARNING: Could not install x11vnc. Xvfb is running for Playwright MCP but no web viewer."
-    echo "Browser vision server started successfully"
-    exit 0
-  fi
-  echo "x11vnc installed"
+  echo "x11vnc not installed — Xvfb running for Playwright MCP, but no web viewer."
+  echo "Rebuild Docker image with KasmVNC for browser web viewer."
+  echo "Browser vision server started successfully"
+  exit 0
 fi
 
-# Start x11vnc
 x11vnc -display ":${DISPLAY_NUM}" -nopw -forever -shared -rfbport 5900 \
   > "$LOG_DIR/x11vnc.log" 2>&1 &
 X11VNC_PID=$!
@@ -126,53 +119,45 @@ disown $X11VNC_PID
 sleep 1
 
 if ! kill -0 $X11VNC_PID 2>/dev/null; then
-  echo "WARNING: x11vnc failed. Xvfb running for Playwright MCP but no web viewer."
+  echo "WARNING: x11vnc failed to start. Xvfb running for Playwright MCP."
   echo "Browser vision server started successfully"
   exit 0
 fi
 echo "x11vnc started (pid $X11VNC_PID)"
 
-# Install websockify + noVNC if not present
-if ! command -v websockify &>/dev/null; then
-  echo "Installing websockify via pip..."
-  pip3 install --user --quiet websockify 2>"$LOG_DIR/websockify-install.log" || true
-  export PATH="$HOME/.local/bin:$PATH"
-fi
+# websockify + noVNC web client (only if already installed)
+WEBSOCKIFY_BIN=""
+for bin in websockify "$HOME/.local/bin/websockify"; do
+  command -v "$bin" &>/dev/null && WEBSOCKIFY_BIN="$bin" && break
+done
 
-# Get noVNC web client
-NOVNC_DIR="$HOME/.local/share/noVNC"
-if [ ! -d "$NOVNC_DIR" ]; then
-  echo "Downloading noVNC..."
-  mkdir -p "$NOVNC_DIR"
-  curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.tar.gz \
-    | tar xz --strip-components=1 -C "$NOVNC_DIR" 2>"$LOG_DIR/novnc-download.log"
-fi
+NOVNC_DIR=""
+for dir in /usr/share/novnc "$HOME/.local/share/noVNC"; do
+  [ -d "$dir" ] && NOVNC_DIR="$dir" && break
+done
 
-# Ensure vnc.html exists (some versions use vnc_lite.html)
-if [ ! -f "$NOVNC_DIR/vnc.html" ] && [ -f "$NOVNC_DIR/vnc_lite.html" ]; then
-  ln -sf "$NOVNC_DIR/vnc_lite.html" "$NOVNC_DIR/vnc.html"
-fi
+if [ -n "$WEBSOCKIFY_BIN" ] && [ -n "$NOVNC_DIR" ]; then
+  # Ensure vnc.html exists
+  if [ ! -f "$NOVNC_DIR/vnc.html" ] && [ -f "$NOVNC_DIR/vnc_lite.html" ]; then
+    ln -sf "$NOVNC_DIR/vnc_lite.html" "$NOVNC_DIR/vnc.html"
+  fi
 
-# Start websockify with noVNC web serving
-if command -v websockify &>/dev/null && [ -d "$NOVNC_DIR" ]; then
-  websockify --web="$NOVNC_DIR" ${WEB_PORT} localhost:5900 \
+  "$WEBSOCKIFY_BIN" --web="$NOVNC_DIR" ${WEB_PORT} localhost:5900 \
     > "$LOG_DIR/websockify.log" 2>&1 &
   WS_PID=$!
   disown $WS_PID
   sleep 1
 
   if kill -0 $WS_PID 2>/dev/null; then
-    echo "websockify + noVNC started on port ${WEB_PORT} (pid $WS_PID)"
+    echo "websockify + noVNC on port ${WEB_PORT} (pid $WS_PID)"
+    echo "Browser vision web UI: http://localhost:${WEB_PORT}/vnc.html?autoconnect=true&resize=remote"
   else
-    echo "WARNING: websockify failed. Check $LOG_DIR/websockify.log"
-    cat "$LOG_DIR/websockify.log" 2>/dev/null | tail -5
+    echo "WARNING: websockify failed"
+    tail -3 "$LOG_DIR/websockify.log" 2>/dev/null
   fi
 else
-  echo "WARNING: websockify or noVNC not available. No web viewer."
+  echo "websockify/noVNC not installed — no web viewer (x11vnc on port 5900 for VNC clients)"
 fi
 
-echo ""
-echo "Browser vision web UI: http://localhost:${WEB_PORT}/vnc.html?autoconnect=true&resize=remote"
 echo "Display: ${DISPLAY}"
-echo "Logs: ${LOG_DIR}/"
 echo "Browser vision server started successfully"
