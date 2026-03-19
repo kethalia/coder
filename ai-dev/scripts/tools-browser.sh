@@ -15,52 +15,57 @@ export npm_config_prefix="$HOME/.local"
 
 printf "${BOLD}[browser] Setting up browser vision tools...${RESET}\n"
 
-# Detect chromium binary path (varies by distro/install method)
+# Detect a REAL chromium binary (not the Ubuntu 24.04 snap stub)
+# On Ubuntu 24.04, /usr/bin/chromium-browser is a stub that says "install the snap"
 CHROMIUM_BIN=""
-for bin in /usr/bin/chromium-browser /usr/bin/chromium /snap/bin/chromium; do
+for bin in /usr/bin/google-chrome-stable /usr/bin/google-chrome /usr/bin/chromium-browser /usr/bin/chromium /snap/bin/chromium; do
   if [ -x "$bin" ]; then
-    CHROMIUM_BIN="$bin"
-    break
+    # Test if it's a real binary by checking --version
+    if "$bin" --version 2>&1 | grep -qi "chromium\|chrome"; then
+      CHROMIUM_BIN="$bin"
+      echo "Chromium binary: $CHROMIUM_BIN ($("$bin" --version 2>&1 | head -1))"
+      break
+    else
+      echo "Skipping $bin (stub/not working: $("$bin" --version 2>&1 | head -1))"
+    fi
   fi
 done
+
+# If no working system chromium, install Playwright's bundled browser
+USE_PLAYWRIGHT_BROWSER=false
 if [ -z "$CHROMIUM_BIN" ]; then
-  printf "${YELLOW}[warn] Chromium not found, Playwright MCP will use its own browser${RESET}\n"
-  CHROMIUM_BIN=""
+  printf "${YELLOW}[warn] No working system chromium found${RESET}\n"
+  echo "Installing Playwright's bundled Chromium..."
+  if npx -y playwright install chromium 2>&1; then
+    USE_PLAYWRIGHT_BROWSER=true
+    printf "${GREEN}[ok] Playwright Chromium installed${RESET}\n"
+  else
+    printf "${YELLOW}[warn] Playwright browser install failed, MCP may not work${RESET}\n"
+  fi
 fi
-echo "Chromium binary: ${CHROMIUM_BIN:-not found}"
 
-# Playwright MCP CLI args
-# --browser chromium: explicit browser type
-# --executable-path: use system chromium instead of downloading
-# --no-sandbox: required in Docker (no suid sandbox)
-if [ -n "$CHROMIUM_BIN" ]; then
-  PLAYWRIGHT_ARGS="--browser chromium --executable-path $CHROMIUM_BIN --no-sandbox"
+# Build MCP args based on which browser we're using
+if [ "$USE_PLAYWRIGHT_BROWSER" = "true" ] || [ -z "$CHROMIUM_BIN" ]; then
+  # Use Playwright's own chromium - no --executable-path needed
+  MCP_ARGS_JSON='["-y", "@playwright/mcp", "--no-sandbox"]'
+  MCP_ARGS_CLI="--no-sandbox"
 else
-  PLAYWRIGHT_ARGS="--no-sandbox"
+  # Use system browser (chrome or chromium)
+  # Detect browser type from binary name
+  if echo "$CHROMIUM_BIN" | grep -q "chrome"; then
+    BROWSER_TYPE="chrome"
+  else
+    BROWSER_TYPE="chromium"
+  fi
+  MCP_ARGS_JSON="[\"-y\", \"@playwright/mcp\", \"--browser\", \"$BROWSER_TYPE\", \"--executable-path\", \"$CHROMIUM_BIN\", \"--no-sandbox\"]"
+  MCP_ARGS_CLI="--browser $BROWSER_TYPE --executable-path $CHROMIUM_BIN --no-sandbox"
 fi
-
-# The MCP config JSON for Claude Code settings.json
-CLAUDE_MCP_JSON=$(cat << MCPJSON
-{
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp", "--browser", "chromium"${CHROMIUM_BIN:+, "--executable-path", "$CHROMIUM_BIN"}, "--no-sandbox"],
-      "env": {
-        "DISPLAY": ":99",
-        "PLAYWRIGHT_BROWSERS_PATH": "0",
-        "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
-      }
-    }
-  }
-}
-MCPJSON
-)
 
 # Configure Claude Code MCP
 printf "${BOLD}[browser] Configuring Claude Code MCP...${RESET}\n"
 
 # Wait for claude binary (installed concurrently by claude-install.sh)
+printf "${BOLD}[browser] Waiting for Claude Code to be installed...${RESET}\n"
 for i in $(seq 1 30); do
   command -v claude &>/dev/null && break
   sleep 2
@@ -71,7 +76,7 @@ CLAUDE_MCP_DONE=false
 if command -v claude &>/dev/null; then
   # Try 'claude mcp add' first (proper way)
   echo "Trying 'claude mcp add'..."
-  if claude mcp add playwright -- npx -y @playwright/mcp $PLAYWRIGHT_ARGS 2>&1; then
+  if claude mcp add playwright -- npx -y @playwright/mcp $MCP_ARGS_CLI 2>&1; then
     CLAUDE_MCP_DONE=true
     printf "${GREEN}[ok] Claude Code MCP added via 'claude mcp add'${RESET}\n"
   else
@@ -84,56 +89,74 @@ if [ "$CLAUDE_MCP_DONE" = "false" ]; then
   mkdir -p "$HOME/.claude"
   CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 
-  if [ -f "$CLAUDE_SETTINGS" ]; then
-    # Merge into existing settings
-    MERGED=$(jq '.mcpServers.playwright = {
+  MCP_CONFIG=$(cat << MCPJSON
+{
+  "mcpServers": {
+    "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp", "--browser", "chromium"'"${CHROMIUM_BIN:+, \"--executable-path\", \"$CHROMIUM_BIN\"}"', "--no-sandbox"],
-      "env": {"DISPLAY": ":99", "PLAYWRIGHT_BROWSERS_PATH": "0", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"}
-    }' "$CLAUDE_SETTINGS" 2>/dev/null) && echo "$MERGED" > "$CLAUDE_SETTINGS" || {
-      echo "$CLAUDE_MCP_JSON" > "$CLAUDE_SETTINGS"
+      "args": $MCP_ARGS_JSON,
+      "env": {
+        "DISPLAY": ":99"
+      }
+    }
+  }
+}
+MCPJSON
+)
+
+  if [ -f "$CLAUDE_SETTINGS" ] && command -v jq &>/dev/null; then
+    # Merge into existing settings using jq
+    MERGED=$(jq --argjson args "$MCP_ARGS_JSON" \
+      '.mcpServers.playwright = {"command": "npx", "args": $args, "env": {"DISPLAY": ":99"}}' \
+      "$CLAUDE_SETTINGS" 2>/dev/null) && echo "$MERGED" > "$CLAUDE_SETTINGS" || {
+      echo "$MCP_CONFIG" > "$CLAUDE_SETTINGS"
     }
   else
-    echo "$CLAUDE_MCP_JSON" > "$CLAUDE_SETTINGS"
+    echo "$MCP_CONFIG" > "$CLAUDE_SETTINGS"
   fi
   echo "Wrote Claude settings.json"
 fi
 
-# Also write .mcp.json in home dir as fallback (Claude Code reads this from cwd)
+# Write .mcp.json in home dir as fallback (Claude Code reads this from cwd)
 cat > "$HOME/.mcp.json" << MCPFILE
 {
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp", "--browser", "chromium"${CHROMIUM_BIN:+, "--executable-path", "$CHROMIUM_BIN"}, "--no-sandbox"],
+      "args": $MCP_ARGS_JSON,
       "env": {
-        "DISPLAY": ":99",
-        "PLAYWRIGHT_BROWSERS_PATH": "0",
-        "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
+        "DISPLAY": ":99"
       }
     }
   }
 }
 MCPFILE
-echo "Wrote ~/.mcp.json fallback"
+# Validate the JSON we wrote
+if command -v jq &>/dev/null; then
+  if jq . "$HOME/.mcp.json" > /dev/null 2>&1; then
+    echo "Wrote ~/.mcp.json (valid JSON)"
+  else
+    printf "${YELLOW}[warn] ~/.mcp.json has invalid JSON, removing${RESET}\n"
+    rm -f "$HOME/.mcp.json"
+  fi
+fi
 
 printf "${GREEN}[ok] Claude Code MCP configured for Playwright${RESET}\n"
 
 # Configure OpenCode MCP server for Playwright
 OPENCODE_CONFIG="$HOME/.config/opencode/config.json"
-OPENCODE_MCP_BLOCK=".mcp.playwright = {
-  \"type\": \"local\",
-  \"command\": [\"npx\", \"-y\", \"@playwright/mcp\", \"--browser\", \"chromium\"${CHROMIUM_BIN:+, \"--executable-path\", \"$CHROMIUM_BIN\"}, \"--no-sandbox\"],
-  \"enabled\": true,
-  \"environment\": {
-    \"DISPLAY\": \":99\",
-    \"PLAYWRIGHT_BROWSERS_PATH\": \"0\",
-    \"PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD\": \"1\"
-  }
-}"
+OPENCODE_MCP='{"type": "local", "command": ["npx", "-y", "@playwright/mcp"'
 
-if [ -f "$OPENCODE_CONFIG" ]; then
-  MERGED=$(jq "$OPENCODE_MCP_BLOCK" "$OPENCODE_CONFIG" 2>/dev/null) && echo "$MERGED" > "$OPENCODE_CONFIG" || {
+if [ "$USE_PLAYWRIGHT_BROWSER" = "true" ] || [ -z "$CHROMIUM_BIN" ]; then
+  OPENCODE_CMD='["npx", "-y", "@playwright/mcp", "--no-sandbox"]'
+else
+  OPENCODE_CMD="[\"npx\", \"-y\", \"@playwright/mcp\", \"--browser\", \"chromium\", \"--executable-path\", \"$CHROMIUM_BIN\", \"--no-sandbox\"]"
+fi
+
+if [ -f "$OPENCODE_CONFIG" ] && command -v jq &>/dev/null; then
+  MERGED=$(jq --argjson cmd "$OPENCODE_CMD" \
+    '.mcp.playwright = {"type": "local", "command": $cmd, "enabled": true, "environment": {"DISPLAY": ":99"}}' \
+    "$OPENCODE_CONFIG" 2>/dev/null) && echo "$MERGED" > "$OPENCODE_CONFIG" || {
     printf "${YELLOW}[warn] Could not merge MCP into OpenCode config${RESET}\n"
   }
 else
@@ -143,12 +166,10 @@ else
   "mcp": {
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp", "--browser", "chromium"${CHROMIUM_BIN:+, "--executable-path", "$CHROMIUM_BIN"}, "--no-sandbox"],
+      "command": $OPENCODE_CMD,
       "enabled": true,
       "environment": {
-        "DISPLAY": ":99",
-        "PLAYWRIGHT_BROWSERS_PATH": "0",
-        "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
+        "DISPLAY": ":99"
       }
     }
   }
@@ -157,39 +178,41 @@ OPMCP
 fi
 printf "${GREEN}[ok] OpenCode MCP configured for Playwright${RESET}\n"
 
+# Determine the chromium binary for helper scripts
+# Use Playwright's chromium path if available, else system
+if [ "$USE_PLAYWRIGHT_BROWSER" = "true" ]; then
+  # Playwright stores chromium in ~/.cache/ms-playwright/
+  PW_CHROME=$(find "$HOME/.cache/ms-playwright" -name "chromium" -o -name "chrome" -type f 2>/dev/null | head -1)
+  HELPER_CHROMIUM="${PW_CHROME:-chromium}"
+else
+  HELPER_CHROMIUM="${CHROMIUM_BIN:-chromium}"
+fi
+
 # Create screenshot helper script for Pi and GSD agents
-cat > "$HOME/.local/bin/browser-screenshot" << 'SCREENSHOT'
+cat > "$HOME/.local/bin/browser-screenshot" << SCREENSHOT
 #!/bin/bash
 set -e
-URL="${1:?Usage: browser-screenshot <url> [output-path]}"
-OUTPUT="${2:-/tmp/screenshot-$(date +%s).png}"
-VIEWPORT="${BROWSER_VIEWPORT:-1280x720}"
-WIDTH=$(echo "$VIEWPORT" | cut -dx -f1)
-HEIGHT=$(echo "$VIEWPORT" | cut -dx -f2)
-CHROMIUM=""
-for bin in /usr/bin/chromium-browser /usr/bin/chromium; do
-  [ -x "$bin" ] && CHROMIUM="$bin" && break
-done
-${CHROMIUM:-chromium-browser} \
-  --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-  --window-size="$WIDTH,$HEIGHT" --screenshot="$OUTPUT" --hide-scrollbars \
-  "$URL" 2>/dev/null
-[ -f "$OUTPUT" ] && echo "$OUTPUT" || { echo "ERROR: Screenshot failed" >&2; exit 1; }
+URL="\${1:?Usage: browser-screenshot <url> [output-path]}"
+OUTPUT="\${2:-/tmp/screenshot-\$(date +%s).png}"
+VIEWPORT="\${BROWSER_VIEWPORT:-1280x720}"
+WIDTH=\$(echo "\$VIEWPORT" | cut -dx -f1)
+HEIGHT=\$(echo "\$VIEWPORT" | cut -dx -f2)
+$HELPER_CHROMIUM \\
+  --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \\
+  --window-size="\$WIDTH,\$HEIGHT" --screenshot="\$OUTPUT" --hide-scrollbars \\
+  "\$URL" 2>/dev/null
+[ -f "\$OUTPUT" ] && echo "\$OUTPUT" || { echo "ERROR: Screenshot failed" >&2; exit 1; }
 SCREENSHOT
 chmod +x "$HOME/.local/bin/browser-screenshot"
 
 # Create browser-html helper to dump rendered HTML
-cat > "$HOME/.local/bin/browser-html" << 'BROWSERHTML'
+cat > "$HOME/.local/bin/browser-html" << BROWSERHTML
 #!/bin/bash
 set -e
-URL="${1:?Usage: browser-html <url>}"
-CHROMIUM=""
-for bin in /usr/bin/chromium-browser /usr/bin/chromium; do
-  [ -x "$bin" ] && CHROMIUM="$bin" && break
-done
-${CHROMIUM:-chromium-browser} \
-  --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-  --dump-dom "$URL" 2>/dev/null
+URL="\${1:?Usage: browser-html <url>}"
+$HELPER_CHROMIUM \\
+  --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \\
+  --dump-dom "\$URL" 2>/dev/null
 BROWSERHTML
 chmod +x "$HOME/.local/bin/browser-html"
 

@@ -8,8 +8,7 @@ RESOLUTION="${BROWSER_VIEWPORT:-1280x720}"
 VNC_PORT=5999
 NOVNC_PORT=6080
 LOG_DIR="$HOME/.local/share/browser-vision"
-WEB_DIR="$HOME/.local/share/browser-vision/web"
-mkdir -p "$LOG_DIR" "$WEB_DIR"
+mkdir -p "$LOG_DIR"
 
 # Check required commands
 READY=true
@@ -71,11 +70,7 @@ if ! kill -0 "$X11VNC_PID" 2>/dev/null; then
   cat "$LOG_DIR/x11vnc.log" 2>/dev/null || true
 fi
 
-# Install a known-working websockify from pip (system package has broken --web on Ubuntu 24.04)
-echo "Installing websockify from pip..."
-pip3 install --user --break-system-packages websockify 2>&1 | tail -1 || true
-
-# Set up local noVNC web directory with index.html
+# noVNC web directory
 NOVNC_SRC="/usr/share/novnc"
 if [ ! -d "$NOVNC_SRC" ]; then
   echo "WARNING: noVNC not found at $NOVNC_SRC"
@@ -83,30 +78,16 @@ if [ ! -d "$NOVNC_SRC" ]; then
   exit 0
 fi
 
-# Symlink all noVNC files into our local web directory
-for item in "$NOVNC_SRC"/*; do
-  bn=$(basename "$item")
-  rm -rf "$WEB_DIR/$bn"
-  ln -sf "$item" "$WEB_DIR/$bn"
-done
-
-# Create index.html that redirects to vnc_lite.html (for root / requests)
-cat > "$WEB_DIR/index.html" << 'INDEXHTML'
-<!DOCTYPE html>
-<html>
-<head><meta http-equiv="refresh" content="0;url=vnc_lite.html?autoconnect=true&resize=remote"></head>
-<body><a href="vnc_lite.html?autoconnect=true&resize=remote">Connect</a></body>
-</html>
-INDEXHTML
-
-echo "Web directory: $WEB_DIR"
-echo "Contents:"
-ls "$WEB_DIR"/*.html 2>/dev/null || echo "  (no html files found!)"
+# Force install websockify from pip to get a working version
+# Ubuntu 24.04's system websockify 0.10.0 has broken --web file serving
+echo "Installing websockify from pip (overriding system package)..."
+pip3 install --user --break-system-packages --ignore-installed websockify 2>&1 | tail -3 || true
 
 # Choose websockify: prefer pip-installed version, then system
 if [ -f "$HOME/.local/bin/websockify" ]; then
   WS_BIN="$HOME/.local/bin/websockify"
   echo "Using pip websockify: $WS_BIN"
+  "$WS_BIN" --version 2>&1 || true
 elif command -v websockify &>/dev/null; then
   WS_BIN="websockify"
   echo "Using system websockify: $(which websockify)"
@@ -115,9 +96,9 @@ else
   exit 0
 fi
 
-# Start websockify with our local web directory
-echo "Starting: $WS_BIN --web=$WEB_DIR $NOVNC_PORT localhost:$VNC_PORT"
-nohup "$WS_BIN" --web="$WEB_DIR" "${NOVNC_PORT}" "localhost:${VNC_PORT}" \
+# Start websockify with noVNC web directory
+echo "Starting: $WS_BIN --web=$NOVNC_SRC $NOVNC_PORT localhost:$VNC_PORT"
+nohup "$WS_BIN" --web="$NOVNC_SRC" "${NOVNC_PORT}" "localhost:${VNC_PORT}" \
   > "$LOG_DIR/novnc.log" 2>&1 &
 NOVNC_PID=$!
 disown $NOVNC_PID
@@ -129,7 +110,7 @@ if kill -0 "$NOVNC_PID" 2>/dev/null; then
   echo "  VNC:     localhost:${VNC_PORT}"
   echo "  Display: ${DISPLAY}"
   echo "  Logs:    ${LOG_DIR}/"
-  # Show websockify startup output
+  # Show websockify startup output for debugging
   cat "$LOG_DIR/novnc.log" 2>/dev/null || true
 else
   echo "WARNING: websockify failed to start. Log output:"

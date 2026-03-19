@@ -59,22 +59,19 @@ RUN apt-get update \
         zsh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chromium and dependencies for headless browser (AI agent vision)
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends \
-        chromium-browser \
+# Install Google Chrome (real browser, not Ubuntu 24.04's chromium-browser snap stub)
+# and dependencies for headless browser (AI agent vision)
+RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends /tmp/chrome.deb \
         fonts-liberation \
         fonts-noto-color-emoji \
-        libgbm1 \
-        libnss3 \
-        libatk-bridge2.0-0 \
-        libgtk-3-0 \
-        libasound2t64 \
         xvfb \
         x11vnc \
         fluxbox \
         novnc \
         websockify \
+    && rm -f /tmp/chrome.deb \
     && rm -rf /var/lib/apt/lists/* \
     && if [ ! -f /usr/share/novnc/vnc.html ] && [ -f /usr/share/novnc/vnc_lite.html ]; then \
          ln -s /usr/share/novnc/vnc_lite.html /usr/share/novnc/vnc.html; \
