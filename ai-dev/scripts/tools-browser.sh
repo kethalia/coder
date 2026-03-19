@@ -16,9 +16,9 @@ export npm_config_prefix="$HOME/.local"
 printf "$${BOLD}[browser] Setting up browser vision tools...$${RESET}\n"
 
 # Install Playwright MCP server globally
-if ! npm list -g @anthropic-ai/mcp-server-playwright &> /dev/null 2>&1; then
+if ! npm list -g @playwright/mcp &> /dev/null 2>&1; then
   printf "$${BOLD}[install] Playwright MCP server...$${RESET}\n"
-  npm install -g @anthropic-ai/mcp-server-playwright 2>/dev/null || true
+  npm install -g @playwright/mcp 2>/dev/null || true
 fi
 
 # Install Playwright browsers (use system Chromium to save space)
@@ -38,7 +38,7 @@ CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 CLAUDE_MCP_BLOCK=$(cat << 'JQEOF'
 .mcpServers.playwright = {
   "command": "npx",
-  "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
+  "args": ["-y", "@playwright/mcp"],
   "env": {
     "DISPLAY": ":99",
     "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
@@ -55,7 +55,7 @@ if [ -f "$CLAUDE_SETTINGS" ]; then
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
+      "args": ["-y", "@playwright/mcp"],
       "env": {
         "DISPLAY": ":99",
         "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
@@ -71,7 +71,7 @@ else
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-playwright"],
+      "args": ["-y", "@playwright/mcp"],
       "env": {
         "DISPLAY": ":99",
         "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH": "/usr/bin/chromium-browser"
@@ -88,7 +88,7 @@ OPENCODE_CONFIG="$HOME/.config/opencode/config.json"
 OPENCODE_MCP_BLOCK=$(cat << 'JQEOF'
 .mcp.playwright = {
   "type": "local",
-  "command": ["npx", "-y", "@anthropic-ai/mcp-server-playwright"],
+  "command": ["npx", "-y", "@playwright/mcp"],
   "enabled": true,
   "environment": {
     "DISPLAY": ":99",
@@ -110,7 +110,7 @@ else
   "mcp": {
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@anthropic-ai/mcp-server-playwright"],
+      "command": ["npx", "-y", "@playwright/mcp"],
       "enabled": true,
       "environment": {
         "DISPLAY": ":99",

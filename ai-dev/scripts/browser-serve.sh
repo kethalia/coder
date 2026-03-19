@@ -8,7 +8,8 @@ RESOLUTION="${BROWSER_VIEWPORT:-1280x720}"
 VNC_PORT=5999
 NOVNC_PORT=6080
 LOG_DIR="$HOME/.local/share/browser-vision"
-mkdir -p "$LOG_DIR"
+WEB_DIR="$HOME/.local/share/browser-vision/web"
+mkdir -p "$LOG_DIR" "$WEB_DIR"
 
 # Check required commands
 READY=true
@@ -72,42 +73,50 @@ if ! kill -0 "$X11VNC_PID" 2>/dev/null; then
   cat "$LOG_DIR/x11vnc.log" 2>/dev/null || true
 fi
 
-# Determine noVNC web directory — log what we find for debugging
-NOVNC_DIR=""
-echo "Searching for noVNC web directory..."
+# Set up local noVNC web directory with files we control
+# This avoids permission issues with /usr/share/novnc and ensures index.html exists
+NOVNC_SRC=""
 for dir in /usr/share/novnc /opt/novnc; do
-  echo "  checking $dir ..."
-  if [ -d "$dir" ]; then
-    ls "$dir"/*.html 2>/dev/null && echo "  -> found HTML files in $dir"
-    if [ -f "$dir/vnc.html" ] || [ -f "$dir/vnc_lite.html" ] || [ -f "$dir/index.html" ]; then
-      NOVNC_DIR="$dir"
-      echo "  -> using $NOVNC_DIR"
-      break
-    fi
+  if [ -d "$dir" ] && ls "$dir"/*.html &>/dev/null; then
+    NOVNC_SRC="$dir"
+    break
   fi
 done
 
-# Fallback: search more broadly
-if [ -z "$NOVNC_DIR" ]; then
-  echo "  broad search for vnc*.html under /usr/share..."
-  FOUND=$(find /usr/share -maxdepth 3 -name "vnc*.html" -printf "%h\n" 2>/dev/null | head -1)
-  if [ -n "$FOUND" ]; then
-    NOVNC_DIR="$FOUND"
-    echo "  -> found at $NOVNC_DIR"
-  fi
-fi
-
-if [ -z "$NOVNC_DIR" ]; then
+if [ -z "$NOVNC_SRC" ]; then
   echo "WARNING: noVNC web directory not found"
   echo "VNC is still accessible directly on port ${VNC_PORT}"
   exit 0
 fi
 
-echo "noVNC web directory: $NOVNC_DIR"
-ls -la "$NOVNC_DIR/" 2>/dev/null | head -20
+echo "Found noVNC source at: $NOVNC_SRC"
 
-# Start noVNC via websockify
-nohup websockify --web "$NOVNC_DIR" "${NOVNC_PORT}" "localhost:${VNC_PORT}" \
+# Copy/symlink noVNC files to our writable web directory
+# Use symlinks for efficiency, falling back to copy
+for item in "$NOVNC_SRC"/*; do
+  basename=$(basename "$item")
+  rm -rf "$WEB_DIR/$basename"
+  ln -sf "$item" "$WEB_DIR/$basename"
+done
+
+# Create index.html redirect so root / works
+cat > "$WEB_DIR/index.html" << 'INDEXHTML'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="refresh" content="0;url=vnc_lite.html?autoconnect=true&resize=remote">
+</head>
+<body>
+  <p>Redirecting to <a href="vnc_lite.html?autoconnect=true&resize=remote">noVNC</a>...</p>
+</body>
+</html>
+INDEXHTML
+
+echo "Web directory prepared at: $WEB_DIR"
+ls -la "$WEB_DIR/" 2>/dev/null | head -20
+
+# Start noVNC via websockify with our local web directory
+nohup websockify --web "$WEB_DIR" "${NOVNC_PORT}" "localhost:${VNC_PORT}" \
   > "$LOG_DIR/novnc.log" 2>&1 &
 NOVNC_PID=$!
 disown $NOVNC_PID
@@ -119,7 +128,6 @@ if kill -0 "$NOVNC_PID" 2>/dev/null; then
   echo "  VNC:     localhost:${VNC_PORT}"
   echo "  Display: ${DISPLAY}"
   echo "  Logs:    ${LOG_DIR}/"
-  # Log what websockify says during startup
   cat "$LOG_DIR/novnc.log" 2>/dev/null || true
 else
   echo "WARNING: websockify failed to start. Check $LOG_DIR/novnc.log"
