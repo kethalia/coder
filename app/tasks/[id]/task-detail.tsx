@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { getTaskAction } from "@/lib/actions/tasks";
+import type { TaskWithRelations } from "@/lib/types/tasks";
+import { ACTIVE_STATUSES } from "@/lib/types/tasks";
+import { shortId, formatTimestamp, statusVariant } from "@/lib/helpers/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,83 +15,13 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, ArrowLeft, ExternalLink, GitBranch, Paperclip } from "lucide-react";
 
-// ── Types ──────────────────────────────────────────────────────────
-
-interface TaskLog {
-  id: string;
-  taskId: string;
-  message: string;
-  level: string;
-  createdAt: string;
-}
-
-interface Workspace {
-  id: string;
-  taskId: string;
-  coderWorkspaceId: string | null;
-  templateType: string;
-  status: string;
-  createdAt: string;
-}
-
-interface Attachment {
-  name: string;
-  data: string;
-  type: string;
-}
-
-interface Task {
-  id: string;
-  prompt: string;
-  repoUrl: string;
-  status: string;
-  branch: string | null;
-  prUrl: string | null;
-  errorMessage: string | null;
-  createdAt: string;
-  updatedAt: string;
-  attachments: Attachment[] | null;
-  workspaces: Workspace[];
-  logs: TaskLog[];
-}
-
-// ── Status badge variant mapping ──────────────────────────────────
-
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  queued: "secondary",
-  running: "default",
-  verifying: "outline",
-  done: "default",
-  failed: "destructive",
-};
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
-
-function formatTimestamp(date: string): string {
-  return new Date(date).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-const ACTIVE_STATUSES = new Set(["queued", "running", "verifying"]);
-
-// ── Component ───────────────────────────────────────────────────────
-
-export function TaskDetail({ initialTask }: { initialTask: Task }) {
-  const [task, setTask] = useState<Task>(initialTask);
+export function TaskDetail({ initialTask }: { initialTask: TaskWithRelations }) {
+  const [task, setTask] = useState<TaskWithRelations>(initialTask);
 
   const { execute } = useAction(getTaskAction, {
     onSuccess: ({ data }) => {
       if (data) {
-        setTask(data as Task);
+        setTask(data as TaskWithRelations);
       }
     },
   });
@@ -143,13 +76,11 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Prompt */}
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Prompt</p>
             <p className="text-foreground whitespace-pre-wrap">{task.prompt}</p>
           </div>
 
-          {/* Repo URL */}
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Repository</p>
             <a
@@ -163,7 +94,6 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
             </a>
           </div>
 
-          {/* Branch */}
           {task.branch && (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Branch</p>
@@ -174,7 +104,6 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
             </div>
           )}
 
-          {/* PR URL */}
           {task.prUrl && (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Pull Request</p>
@@ -192,7 +121,6 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
 
           <Separator />
 
-          {/* Timestamps */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Created</p>
@@ -217,10 +145,7 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
           <CardContent>
             <ul className="space-y-2">
               {task.attachments.map((att, i) => (
-                <li
-                  key={i}
-                  className="flex items-center gap-3 text-sm"
-                >
+                <li key={i} className="flex items-center gap-3 text-sm">
                   <Paperclip className="h-3 w-3 text-muted-foreground" />
                   <Badge variant="outline" className="font-mono text-xs">
                     {att.type}
@@ -266,7 +191,7 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
         </CardContent>
       </Card>
 
-      {/* Logs timeline */}
+      {/* Logs */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
@@ -280,20 +205,11 @@ export function TaskDetail({ initialTask }: { initialTask: Task }) {
             <ScrollArea className="h-[300px]">
               <div className="space-y-1">
                 {task.logs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex items-start gap-3 py-1.5 text-sm"
-                  >
+                  <div key={log.id} className="flex items-start gap-3 py-1.5 text-sm">
                     <span className="shrink-0 text-xs text-muted-foreground font-mono tabular-nums min-w-[140px]">
                       {formatTimestamp(log.createdAt)}
                     </span>
-                    <span
-                      className={
-                        log.level === "error"
-                          ? "text-destructive"
-                          : "text-foreground"
-                      }
-                    >
+                    <span className={log.level === "error" ? "text-destructive" : "text-foreground"}>
                       {log.message}
                     </span>
                   </div>

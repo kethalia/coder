@@ -4,6 +4,8 @@ import { useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createTaskAction } from "@/lib/actions/tasks";
+import { readFileAsBase64 } from "@/lib/helpers/format";
+import type { TaskAttachment } from "@/lib/types/tasks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,26 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-
-interface Attachment {
-  name: string;
-  data: string;
-  type: string;
-}
-
-/** Read a File as a base64-encoded string (without the data URL prefix). */
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1] ?? "";
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function NewTaskPage() {
   const router = useRouter();
@@ -52,8 +34,7 @@ export default function NewTaskPage() {
     const prompt = formData.get("prompt") as string;
     const repoUrl = formData.get("repoUrl") as string;
 
-    // Read selected files as base64 attachments
-    let attachments: Attachment[] | undefined;
+    let attachments: TaskAttachment[] | undefined;
     const files = fileInputRef.current?.files;
     if (files && files.length > 0) {
       attachments = await Promise.all(
@@ -75,7 +56,6 @@ export default function NewTaskPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">New Task</h1>
 
-      {/* Server error banner */}
       {serverError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -90,7 +70,6 @@ export default function NewTaskPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Prompt */}
             <div className="space-y-2">
               <Label htmlFor="prompt">
                 Prompt <span className="text-destructive">*</span>
@@ -109,7 +88,6 @@ export default function NewTaskPage() {
               )}
             </div>
 
-            {/* Repo URL */}
             <div className="space-y-2">
               <Label htmlFor="repoUrl">
                 Repository URL <span className="text-destructive">*</span>
@@ -128,7 +106,6 @@ export default function NewTaskPage() {
               )}
             </div>
 
-            {/* File Attachments */}
             <div className="space-y-2">
               <Label htmlFor="attachments">
                 File Attachments <span className="text-muted-foreground">(optional)</span>
@@ -145,7 +122,6 @@ export default function NewTaskPage() {
               </p>
             </div>
 
-            {/* Submit */}
             <div className="pt-2">
               <Button type="submit" disabled={isPending}>
                 {isPending ? "Submitting…" : "Create Task"}

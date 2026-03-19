@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listTasks } from "@/lib/api/tasks";
 import { TaskListPoller } from "./task-list-poller";
+import { shortRepo, formatRelativeDate, statusVariant } from "@/lib/helpers/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,41 +14,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PlusCircle } from "lucide-react";
-
-/** Map task status to badge variant */
-const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  queued: "secondary",
-  running: "default",
-  verifying: "outline",
-  done: "default",
-  failed: "destructive",
-};
-
-/** Extract org/repo from a GitHub URL */
-function shortRepo(url: string): string {
-  try {
-    const parts = new URL(url).pathname.split("/").filter(Boolean);
-    if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
-    return url;
-  } catch {
-    return url;
-  }
-}
-
-/** Format a date as relative or short string */
-function formatDate(date: Date | string): string {
-  const d = new Date(date);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHrs = Math.floor(diffMin / 60);
-  if (diffHrs < 24) return `${diffHrs}h ago`;
-  const diffDays = Math.floor(diffHrs / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 export default async function TasksPage() {
   const taskList = await listTasks();
@@ -80,7 +46,6 @@ export default async function TasksPage() {
             </CardContent>
           </Card>
         ) : (
-          /* Task table */
           <Card>
             <Table>
               <TableHeader>
@@ -115,7 +80,7 @@ export default async function TasksPage() {
                       </code>
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground text-xs">
-                      {formatDate(task.createdAt)}
+                      {formatRelativeDate(task.createdAt)}
                     </TableCell>
                   </TableRow>
                 ))}
