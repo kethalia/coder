@@ -15,15 +15,23 @@ export npm_config_prefix="$HOME/.local"
 
 printf "${BOLD}[browser] Setting up browser vision tools...${RESET}\n"
 
-# Install Playwright's bundled Chromium (the browser version Playwright is tested against)
-# Don't use system Chrome/Chromium for MCP — Playwright works best with its own browser
-echo "Installing Playwright's bundled Chromium..."
-npx -y playwright install chromium 2>&1 | tail -5
-printf "${GREEN}[ok] Playwright Chromium installed${RESET}\n"
+# Skip 'npx playwright install chromium' — we use the system Chrome directly
+# via --executable-path, which avoids the 200MB+ bundled Chromium download.
 
-# MCP args: let Playwright use its own browser, just add --no-sandbox for Docker
-MCP_ARGS_JSON='["-y", "@playwright/mcp", "--no-sandbox"]'
-MCP_ARGS_CLI="--no-sandbox"
+# Detect Chrome binary (installed in Docker image)
+CHROME_BIN=""
+for bin in /usr/bin/google-chrome-stable /usr/bin/google-chrome; do
+  [ -x "$bin" ] && CHROME_BIN="$bin" && break
+done
+
+if [ -z "$CHROME_BIN" ]; then
+  echo "ERROR: Google Chrome not found, browser vision won't work"
+  exit 0
+fi
+
+# MCP args: use system Chrome, not Playwright's bundled Chromium
+MCP_ARGS_JSON="[\"-y\", \"@playwright/mcp\", \"--no-sandbox\", \"--executable-path\", \"$CHROME_BIN\"]"
+MCP_ARGS_CLI="--no-sandbox --executable-path $CHROME_BIN"
 
 # Configure Claude Code MCP
 printf "${BOLD}[browser] Waiting for Claude Code to be installed...${RESET}\n"
@@ -46,12 +54,12 @@ fi
 
 if [ "$CLAUDE_MCP_DONE" = "false" ]; then
   mkdir -p "$HOME/.claude"
-  cat > "$HOME/.claude/settings.json" << 'SETTINGS'
+  cat > "$HOME/.claude/settings.json" << SETTINGS
 {
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp", "--no-sandbox"],
+      "args": ${MCP_ARGS_JSON},
       "env": {
         "DISPLAY": ":99"
       }
@@ -63,12 +71,12 @@ SETTINGS
 fi
 
 # Write .mcp.json as fallback (Claude Code reads this from cwd)
-cat > "$HOME/.mcp.json" << 'MCPFILE'
+cat > "$HOME/.mcp.json" << MCPFILE
 {
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp", "--no-sandbox"],
+      "args": ${MCP_ARGS_JSON},
       "env": {
         "DISPLAY": ":99"
       }
@@ -81,10 +89,12 @@ printf "${GREEN}[ok] Claude Code MCP configured for Playwright${RESET}\n"
 
 # Configure OpenCode MCP server for Playwright
 OPENCODE_CONFIG="$HOME/.config/opencode/config.json"
+# Build the OpenCode command array with Chrome path
+OC_CMD_JSON="[\"npx\", \"-y\", \"@playwright/mcp\", \"--no-sandbox\", \"--executable-path\", \"$CHROME_BIN\"]"
 if [ -f "$OPENCODE_CONFIG" ] && command -v jq &>/dev/null; then
-  MERGED=$(jq '.mcp.playwright = {
+  MERGED=$(jq --argjson cmd "$OC_CMD_JSON" '.mcp.playwright = {
     "type": "local",
-    "command": ["npx", "-y", "@playwright/mcp", "--no-sandbox"],
+    "command": $cmd,
     "enabled": true,
     "environment": {"DISPLAY": ":99"}
   }' "$OPENCODE_CONFIG" 2>/dev/null) && echo "$MERGED" > "$OPENCODE_CONFIG" || {
@@ -92,12 +102,12 @@ if [ -f "$OPENCODE_CONFIG" ] && command -v jq &>/dev/null; then
   }
 else
   mkdir -p "$HOME/.config/opencode"
-  cat > "$OPENCODE_CONFIG" << 'OPMCP'
+  cat > "$OPENCODE_CONFIG" << OPMCP
 {
   "mcp": {
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp", "--no-sandbox"],
+      "command": ${OC_CMD_JSON},
       "enabled": true,
       "environment": {
         "DISPLAY": ":99"
@@ -109,15 +119,8 @@ OPMCP
 fi
 printf "${GREEN}[ok] OpenCode MCP configured for Playwright${RESET}\n"
 
-# Create screenshot helper using Google Chrome (installed in Docker image)
-# These are for Pi/GSD agents that don't have MCP support
-CHROME_BIN=""
-for bin in /usr/bin/google-chrome-stable /usr/bin/google-chrome; do
-  [ -x "$bin" ] && CHROME_BIN="$bin" && break
-done
-
-if [ -n "$CHROME_BIN" ]; then
-  cat > "$HOME/.local/bin/browser-screenshot" << SCREENSHOT
+# Create screenshot helper using Google Chrome (for Pi/GSD agents without MCP)
+cat > "$HOME/.local/bin/browser-screenshot" << SCREENSHOT
 #!/bin/bash
 set -e
 URL="\${1:?Usage: browser-screenshot <url> [output-path]}"
@@ -143,9 +146,6 @@ $CHROME_BIN \\
 BROWSERHTML
   chmod +x "$HOME/.local/bin/browser-html"
   echo "Helper scripts using: $CHROME_BIN"
-else
-  printf "${YELLOW}[warn] Google Chrome not found, browser-screenshot/browser-html not available${RESET}\n"
-fi
 
 printf "${GREEN}[ok] Browser vision tools ready${RESET}\n"
 printf "  Claude Code & OpenCode: Playwright MCP (navigate, screenshot, click, type)\n"
