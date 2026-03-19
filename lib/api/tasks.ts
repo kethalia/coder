@@ -1,7 +1,5 @@
-import { eq, desc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "@/lib/db";
-import { tasks, taskLogs, workspaces } from "@/lib/db/schema";
 import { getTaskQueue } from "@/lib/queue/task-queue";
 import type { TaskJobData } from "@/lib/queue/task-queue";
 
@@ -31,17 +29,16 @@ export async function createTask(input: {
   const branchName = `hive/${id.slice(0, 8)}/${slugify(input.prompt.slice(0, 30))}`;
 
   // 1. Persist task to Postgres
-  const [task] = await db
-    .insert(tasks)
-    .values({
+  const task = await db.task.create({
+    data: {
       id,
       prompt: input.prompt,
       repoUrl: input.repoUrl,
       status: "queued",
       branch: branchName,
-      attachments: input.attachments ?? null,
-    })
-    .returning();
+      attachments: input.attachments ?? undefined,
+    },
+  });
 
   console.log(`[task] Created task ${id} (status: queued)`);
 
@@ -60,10 +57,12 @@ export async function createTask(input: {
   console.log(`[task] Enqueued job for task ${id}`);
 
   // 3. Log creation
-  await db.insert(taskLogs).values({
-    taskId: id,
-    message: `Task created and queued (branch: ${branchName})`,
-    level: "info",
+  await db.taskLog.create({
+    data: {
+      taskId: id,
+      message: `Task created and queued (branch: ${branchName})`,
+      level: "info",
+    },
   });
 
   return task;
@@ -76,29 +75,18 @@ export async function createTask(input: {
 export async function getTask(id: string) {
   const db = getDb();
 
-  const task = await db.query.tasks.findFirst({
-    where: eq(tasks.id, id),
+  const task = await db.task.findUnique({
+    where: { id },
+    include: {
+      workspaces: true,
+      logs: {
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      },
+    },
   });
 
-  if (!task) return null;
-
-  const relatedWorkspaces = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.taskId, id));
-
-  const recentLogs = await db
-    .select()
-    .from(taskLogs)
-    .where(eq(taskLogs.taskId, id))
-    .orderBy(desc(taskLogs.createdAt))
-    .limit(50);
-
-  return {
-    ...task,
-    workspaces: relatedWorkspaces,
-    logs: recentLogs,
-  };
+  return task ?? null;
 }
 
 /**
@@ -107,11 +95,10 @@ export async function getTask(id: string) {
 export async function listTasks() {
   const db = getDb();
 
-  return db
-    .select()
-    .from(tasks)
-    .orderBy(desc(tasks.createdAt))
-    .limit(50);
+  return db.task.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
 }
 
 /**
@@ -125,21 +112,22 @@ export async function updateTaskStatus(
 ) {
   const db = getDb();
 
-  await db
-    .update(tasks)
-    .set({
+  await db.task.update({
+    where: { id },
+    data: {
       status: status as "queued" | "running" | "verifying" | "done" | "failed",
       errorMessage: errorMessage ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(tasks.id, id));
+    },
+  });
 
-  await db.insert(taskLogs).values({
-    taskId: id,
-    message: errorMessage
-      ? `Status → ${status}: ${errorMessage}`
-      : `Status → ${status}`,
-    level: status === "failed" ? "error" : "info",
+  await db.taskLog.create({
+    data: {
+      taskId: id,
+      message: errorMessage
+        ? `Status → ${status}: ${errorMessage}`
+        : `Status → ${status}`,
+      level: status === "failed" ? "error" : "info",
+    },
   });
 
   console.log(`[task] Task ${id} status → ${status}`);

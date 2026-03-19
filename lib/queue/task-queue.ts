@@ -1,8 +1,6 @@
 import { Queue, Worker, type Job } from "bullmq";
-import { eq } from "drizzle-orm";
 import { getRedisConnection } from "./connection";
 import { getDb } from "@/lib/db";
-import { tasks, taskLogs, workspaces } from "@/lib/db/schema";
 import type { CoderClient } from "@/lib/coder/client";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -65,10 +63,10 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
 
       try {
         // 1. Update task status to 'running'
-        await db
-          .update(tasks)
-          .set({ status: "running", updatedAt: new Date() })
-          .where(eq(tasks.id, taskId));
+        await db.task.update({
+          where: { id: taskId },
+          data: { status: "running" },
+        });
 
         console.log(`[task] Task ${taskId} status → running`);
 
@@ -85,18 +83,22 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
         console.log(`[queue] Created workspace ${workspace.id} for task ${taskId}`);
 
         // 3. Record workspace in DB
-        await db.insert(workspaces).values({
-          taskId,
-          coderWorkspaceId: workspace.id,
-          templateType: "worker",
-          status: "starting",
+        await db.workspace.create({
+          data: {
+            taskId,
+            coderWorkspaceId: workspace.id,
+            templateType: "worker",
+            status: "starting",
+          },
         });
 
         // 4. Log success
-        await db.insert(taskLogs).values({
-          taskId,
-          message: `Workspace ${workspace.name} (${workspace.id}) created`,
-          level: "info",
+        await db.taskLog.create({
+          data: {
+            taskId,
+            message: `Workspace ${workspace.name} (${workspace.id}) created`,
+            level: "info",
+          },
         });
       } catch (error) {
         const errorMessage =
@@ -105,22 +107,23 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
         console.error(`[queue] Job ${job.id} failed for task ${taskId}: ${errorMessage}`);
 
         // Update task to failed
-        await db
-          .update(tasks)
-          .set({
+        await db.task.update({
+          where: { id: taskId },
+          data: {
             status: "failed",
             errorMessage,
-            updatedAt: new Date(),
-          })
-          .where(eq(tasks.id, taskId));
+          },
+        });
 
         console.log(`[task] Task ${taskId} status → failed`);
 
         // Log the error
-        await db.insert(taskLogs).values({
-          taskId,
-          message: `Worker error: ${errorMessage}`,
-          level: "error",
+        await db.taskLog.create({
+          data: {
+            taskId,
+            message: `Worker error: ${errorMessage}`,
+            level: "error",
+          },
         });
 
         // Re-throw so BullMQ marks the job as failed

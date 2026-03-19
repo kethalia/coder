@@ -39,42 +39,25 @@ vi.mock("bullmq", () => ({
   })),
 }));
 
-// Mock db — the key part: we need to track individual calls
-const mockReturning = vi.fn();
-const mockInsertValues = vi.fn().mockReturnValue({
-  returning: mockReturning,
-});
-const mockInsert = vi.fn().mockReturnValue({
-  values: mockInsertValues,
-});
-
-const mockUpdateSet = vi.fn();
-const mockUpdateSetWhere = vi.fn().mockResolvedValue(undefined);
-mockUpdateSet.mockReturnValue({ where: mockUpdateSetWhere });
-const mockUpdate = vi.fn().mockReturnValue({ set: mockUpdateSet });
-
-const mockSelectFrom = vi.fn();
-const mockSelect = vi.fn().mockReturnValue({ from: mockSelectFrom });
-
-const mockFindFirst = vi.fn();
+// Mock Prisma client
+const mockTaskCreate = vi.fn();
+const mockTaskFindUnique = vi.fn();
+const mockTaskFindMany = vi.fn();
+const mockTaskUpdate = vi.fn();
+const mockTaskLogCreate = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   getDb: vi.fn(() => ({
-    insert: mockInsert,
-    update: mockUpdate,
-    select: mockSelect,
-    query: {
-      tasks: {
-        findFirst: mockFindFirst,
-      },
+    task: {
+      create: mockTaskCreate,
+      findUnique: mockTaskFindUnique,
+      findMany: mockTaskFindMany,
+      update: mockTaskUpdate,
+    },
+    taskLog: {
+      create: mockTaskLogCreate,
     },
   })),
-}));
-
-vi.mock("@/lib/db/schema", () => ({
-  tasks: { id: "id" },
-  taskLogs: {},
-  workspaces: {},
 }));
 
 // ── Imports under test ────────────────────────────────────────────
@@ -86,21 +69,20 @@ import { createTask, getTask, listTasks } from "@/lib/api/tasks";
 describe("Task API functions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset default mock return values
-    mockInsertValues.mockReturnValue({ returning: mockReturning });
-    mockReturning.mockResolvedValue([
-      {
-        id: "11111111-2222-3333-4444-555555555555",
-        prompt: "Test prompt",
-        repoUrl: "https://github.com/test/repo",
-        status: "queued",
-        branch: "hive/11111111/test-prompt",
-        prUrl: null,
-        errorMessage: null,
-        createdAt: new Date("2026-01-01"),
-        updatedAt: new Date("2026-01-01"),
-      },
-    ]);
+    // Default return for task creation
+    mockTaskCreate.mockResolvedValue({
+      id: "11111111-2222-3333-4444-555555555555",
+      prompt: "Test prompt",
+      repoUrl: "https://github.com/test/repo",
+      status: "queued",
+      branch: "hive/11111111/test-prompt",
+      prUrl: null,
+      errorMessage: null,
+      attachments: null,
+      createdAt: new Date("2026-01-01"),
+      updatedAt: new Date("2026-01-01"),
+    });
+    mockTaskLogCreate.mockResolvedValue({ id: "log-1" });
   });
 
   describe("createTask()", () => {
@@ -118,8 +100,15 @@ describe("Task API functions", () => {
         status: "queued",
       });
 
-      // Verify DB insert called
-      expect(mockInsert).toHaveBeenCalled();
+      // Verify Prisma create called
+      expect(mockTaskCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: "11111111-2222-3333-4444-555555555555",
+          prompt: "Test prompt",
+          repoUrl: "https://github.com/test/repo",
+          status: "queued",
+        }),
+      });
 
       // Verify BullMQ job enqueued
       expect(mockQueueAdd).toHaveBeenCalledWith(
@@ -139,9 +128,12 @@ describe("Task API functions", () => {
         repoUrl: "https://github.com/test/repo",
       });
 
-      // Check the insert was called with a branch matching the pattern
-      const insertCall = mockInsert.mock.calls[0];
-      expect(insertCall).toBeDefined();
+      // Check Prisma create was called with branch matching the pattern
+      expect(mockTaskCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          branch: expect.stringMatching(/^hive\/11111111\//),
+        }),
+      });
 
       // Check BullMQ job has the branch name
       expect(mockQueueAdd).toHaveBeenCalledWith(
@@ -161,18 +153,11 @@ describe("Task API functions", () => {
         prompt: "Test",
         repoUrl: "https://github.com/test/repo",
         status: "queued",
+        workspaces: [{ id: "ws-1", coderWorkspaceId: "cws-1" }],
+        logs: [{ id: "log-1", message: "Created" }],
       };
 
-      mockFindFirst.mockResolvedValue(mockTask);
-
-      // Mock the select chain for workspaces and logs
-      const mockOrderBy = vi.fn().mockReturnValue({
-        limit: vi.fn().mockResolvedValue([{ id: "log-1", message: "Created" }]),
-      });
-      const mockWhere = vi.fn()
-        .mockReturnValueOnce(Promise.resolve([{ id: "ws-1", coderWorkspaceId: "cws-1" }]))
-        .mockReturnValueOnce({ orderBy: mockOrderBy });
-      mockSelectFrom.mockReturnValue({ where: mockWhere });
+      mockTaskFindUnique.mockResolvedValue(mockTask);
 
       const result = await getTask("abc-123");
 
@@ -181,10 +166,21 @@ describe("Task API functions", () => {
         workspaces: [{ id: "ws-1" }],
         logs: [{ id: "log-1" }],
       });
+
+      expect(mockTaskFindUnique).toHaveBeenCalledWith({
+        where: { id: "abc-123" },
+        include: {
+          workspaces: true,
+          logs: {
+            orderBy: { createdAt: "desc" },
+            take: 50,
+          },
+        },
+      });
     });
 
     it("returns null when task not found", async () => {
-      mockFindFirst.mockResolvedValue(undefined);
+      mockTaskFindUnique.mockResolvedValue(null);
 
       const result = await getTask("nonexistent");
       expect(result).toBeNull();
@@ -198,15 +194,16 @@ describe("Task API functions", () => {
         { id: "task-1", createdAt: new Date("2026-01-01") },
       ];
 
-      const mockLimit = vi.fn().mockResolvedValue(mockTasks);
-      const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
-      mockSelectFrom.mockReturnValue({ orderBy: mockOrderBy });
+      mockTaskFindMany.mockResolvedValue(mockTasks);
 
       const result = await listTasks();
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe("task-2");
-      expect(mockSelect).toHaveBeenCalled();
+      expect(mockTaskFindMany).toHaveBeenCalledWith({
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
     });
   });
 });

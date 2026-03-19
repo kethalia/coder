@@ -1,37 +1,31 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as schema from "./schema";
+import { PrismaClient } from "@prisma/client";
 
-let pool: Pool | null = null;
-let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let prisma: PrismaClient | null = null;
 
 /**
- * Returns a Drizzle ORM instance backed by a pg Pool.
- * Uses lazy singleton pattern — the pool and drizzle instance are created
- * on first call and reused thereafter.
+ * Returns a PrismaClient singleton.
+ * Lazy-initialized on first call, reused thereafter.
  */
-export function getDb() {
-  if (!db) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
+export function getDb(): PrismaClient {
+  if (!prisma) {
+    const url = process.env.DATABASE_URL;
+    if (!url) {
       throw new Error(
         "[db] DATABASE_URL environment variable is not set. " +
           "Check .env.example for the required format."
       );
     }
-    pool = new Pool({ connectionString });
-    db = drizzle(pool, { schema });
+    prisma = new PrismaClient();
   }
-  return db;
+  return prisma;
 }
 
 /**
- * Closes the underlying pg Pool. Call during graceful shutdown.
+ * Disconnects PrismaClient. Call during graceful shutdown.
  */
 export async function closeDb() {
-  if (pool) {
-    await pool.end();
-    pool = null;
-    db = null;
+  if (prisma) {
+    await prisma.$disconnect();
+    prisma = null;
   }
 }

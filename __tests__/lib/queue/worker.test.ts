@@ -44,28 +44,23 @@ vi.mock("bullmq", () => ({
 // Capture the Worker import for accessing __lastProcessor
 import { Worker } from "bullmq";
 
-// Mock db
-const mockUpdate = vi.fn().mockReturnValue({
-  set: vi.fn().mockReturnValue({
-    where: vi.fn().mockResolvedValue(undefined),
-  }),
-});
-
-const mockInsert = vi.fn().mockReturnValue({
-  values: vi.fn().mockResolvedValue(undefined),
-});
+// Mock Prisma client
+const mockTaskUpdate = vi.fn().mockResolvedValue({});
+const mockWorkspaceCreate = vi.fn().mockResolvedValue({});
+const mockTaskLogCreate = vi.fn().mockResolvedValue({});
 
 vi.mock("@/lib/db", () => ({
   getDb: vi.fn(() => ({
-    update: mockUpdate,
-    insert: mockInsert,
+    task: {
+      update: mockTaskUpdate,
+    },
+    workspace: {
+      create: mockWorkspaceCreate,
+    },
+    taskLog: {
+      create: mockTaskLogCreate,
+    },
   })),
-}));
-
-vi.mock("@/lib/db/schema", () => ({
-  tasks: { id: "id" },
-  taskLogs: {},
-  workspaces: {},
 }));
 
 // ── Imports under test ────────────────────────────────────────────
@@ -143,7 +138,10 @@ describe("BullMQ task-dispatch queue", () => {
       await processor(fakeJob);
 
       // Verify task status updated to 'running'
-      expect(mockUpdate).toHaveBeenCalled();
+      expect(mockTaskUpdate).toHaveBeenCalledWith({
+        where: { id: "abc12345-6789-0000-0000-000000000000" },
+        data: { status: "running" },
+      });
 
       // Verify workspace created via Coder client
       expect(mockCoderClient.createWorkspace).toHaveBeenCalledWith(
@@ -157,8 +155,18 @@ describe("BullMQ task-dispatch queue", () => {
         })
       );
 
-      // Verify workspace record inserted + taskLog inserted (2 inserts: workspace + log)
-      expect(mockInsert).toHaveBeenCalledTimes(2);
+      // Verify workspace record created
+      expect(mockWorkspaceCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          taskId: "abc12345-6789-0000-0000-000000000000",
+          coderWorkspaceId: "ws-001",
+          templateType: "worker",
+          status: "starting",
+        }),
+      });
+
+      // Verify taskLog created
+      expect(mockTaskLogCreate).toHaveBeenCalled();
     });
 
     it("handles errors: sets task to failed and logs error", async () => {
@@ -183,11 +191,15 @@ describe("BullMQ task-dispatch queue", () => {
 
       await expect(processor(fakeJob)).rejects.toThrow("Coder API down");
 
-      // Verify task status set to 'failed' (2 update calls: first running, then failed)
-      expect(mockUpdate).toHaveBeenCalledTimes(2);
+      // Verify task status set to 'running' first, then 'failed' (2 update calls)
+      expect(mockTaskUpdate).toHaveBeenCalledTimes(2);
+      expect(mockTaskUpdate).toHaveBeenCalledWith({
+        where: { id: "fail0000-0000-0000-0000-000000000000" },
+        data: { status: "failed", errorMessage: "Coder API down" },
+      });
 
       // Verify error logged to taskLogs
-      expect(mockInsert).toHaveBeenCalled();
+      expect(mockTaskLogCreate).toHaveBeenCalled();
     });
   });
 });

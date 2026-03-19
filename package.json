@@ -9,15 +9,15 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:push": "drizzle-kit push",
-    "db:generate": "drizzle-kit generate"
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@prisma/client": "^6.0.0",
     "bullmq": "^5.0.0",
-    "drizzle-orm": "^0.38.0",
     "ioredis": "^5.4.0",
     "next": "^15.0.0",
-    "pg": "^8.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "uuid": "^11.0.0"
@@ -25,14 +25,13 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/node": "^22",
-    "@types/pg": "^8.11.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
-    "drizzle-kit": "^0.30.0",
     "eslint": "^9",
     "eslint-config-next": "^15",
     "postcss": "^8",
+    "prisma": "^6.0.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.0.0"

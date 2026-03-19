@@ -35,27 +35,22 @@ vi.mock("bullmq", () => ({
   })),
 }));
 
-const mockReturning = vi.fn();
-const mockInsertValues = vi.fn().mockReturnValue({
-  returning: mockReturning,
-});
-const mockInsert = vi.fn().mockReturnValue({
-  values: mockInsertValues,
-});
+// Mock Prisma client
+const mockTaskCreate = vi.fn();
+const mockTaskLogCreate = vi.fn().mockResolvedValue({ id: "log-1" });
 
 vi.mock("@/lib/db", () => ({
   getDb: vi.fn(() => ({
-    insert: mockInsert,
-    query: {
-      tasks: { findFirst: vi.fn() },
+    task: {
+      create: mockTaskCreate,
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+    },
+    taskLog: {
+      create: mockTaskLogCreate,
     },
   })),
-}));
-
-vi.mock("@/lib/db/schema", () => ({
-  tasks: { id: "id" },
-  taskLogs: {},
-  workspaces: {},
 }));
 
 // ── Import under test ────────────────────────────────────────────
@@ -67,7 +62,6 @@ import { createTask } from "@/lib/api/tasks";
 describe("createTask attachments handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockInsertValues.mockReturnValue({ returning: mockReturning });
   });
 
   it("stores attachments when provided", async () => {
@@ -75,20 +69,18 @@ describe("createTask attachments handling", () => {
       { name: "spec.md", data: "YmFzZTY0", type: "text/markdown" },
     ];
 
-    mockReturning.mockResolvedValue([
-      {
-        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-        prompt: "Fix bug",
-        repoUrl: "https://github.com/test/repo",
-        status: "queued",
-        branch: "hive/aaaaaaaa/fix-bug",
-        attachments,
-        prUrl: null,
-        errorMessage: null,
-        createdAt: new Date("2026-01-01"),
-        updatedAt: new Date("2026-01-01"),
-      },
-    ]);
+    mockTaskCreate.mockResolvedValue({
+      id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      prompt: "Fix bug",
+      repoUrl: "https://github.com/test/repo",
+      status: "queued",
+      branch: "hive/aaaaaaaa/fix-bug",
+      attachments,
+      prUrl: null,
+      errorMessage: null,
+      createdAt: new Date("2026-01-01"),
+      updatedAt: new Date("2026-01-01"),
+    });
 
     const task = await createTask({
       prompt: "Fix bug",
@@ -98,28 +90,27 @@ describe("createTask attachments handling", () => {
 
     expect(task.attachments).toEqual(attachments);
 
-    // Verify the insert values included attachments
-    const insertValuesCall = mockInsertValues.mock.calls[0][0];
-    expect(insertValuesCall).toMatchObject({
-      attachments,
+    // Verify Prisma create was called with attachments
+    expect(mockTaskCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        attachments,
+      }),
     });
   });
 
   it("stores null when attachments not provided", async () => {
-    mockReturning.mockResolvedValue([
-      {
-        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-        prompt: "Fix bug",
-        repoUrl: "https://github.com/test/repo",
-        status: "queued",
-        branch: "hive/aaaaaaaa/fix-bug",
-        attachments: null,
-        prUrl: null,
-        errorMessage: null,
-        createdAt: new Date("2026-01-01"),
-        updatedAt: new Date("2026-01-01"),
-      },
-    ]);
+    mockTaskCreate.mockResolvedValue({
+      id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      prompt: "Fix bug",
+      repoUrl: "https://github.com/test/repo",
+      status: "queued",
+      branch: "hive/aaaaaaaa/fix-bug",
+      attachments: null,
+      prUrl: null,
+      errorMessage: null,
+      createdAt: new Date("2026-01-01"),
+      updatedAt: new Date("2026-01-01"),
+    });
 
     const task = await createTask({
       prompt: "Fix bug",
@@ -128,10 +119,8 @@ describe("createTask attachments handling", () => {
 
     expect(task.attachments).toBeNull();
 
-    // Verify the insert values passed null for attachments
-    const insertValuesCall = mockInsertValues.mock.calls[0][0];
-    expect(insertValuesCall).toMatchObject({
-      attachments: null,
-    });
+    // Verify Prisma create was NOT passed attachments (undefined omitted)
+    const createCall = mockTaskCreate.mock.calls[0][0];
+    expect(createCall.data.attachments).toBeUndefined();
   });
 });

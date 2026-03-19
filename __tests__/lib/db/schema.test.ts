@@ -1,55 +1,47 @@
 import { describe, it, expect } from "vitest";
-import { tasks, taskLogs, workspaces, taskStatusEnum, workspaceStatusEnum } from "@/lib/db/schema";
+import fs from "fs";
+import path from "path";
 
-describe("Drizzle schema", () => {
-  it("exports tasks table with expected columns", () => {
-    expect(tasks).toBeDefined();
-    // Verify key columns exist on the table definition
-    const columnNames = Object.keys(tasks);
-    expect(columnNames).toContain("id");
-    expect(columnNames).toContain("prompt");
-    expect(columnNames).toContain("repoUrl");
-    expect(columnNames).toContain("status");
-    expect(columnNames).toContain("createdAt");
-    expect(columnNames).toContain("updatedAt");
+describe("Prisma schema", () => {
+  const schemaPath = path.resolve(__dirname, "../../../prisma/schema.prisma");
+  const schema = fs.readFileSync(schemaPath, "utf-8");
+
+  it("defines Task model with expected fields", () => {
+    expect(schema).toContain("model Task {");
+    expect(schema).toContain("prompt");
+    expect(schema).toContain("repoUrl");
+    expect(schema).toContain("status");
+    expect(schema).toContain("createdAt");
+    expect(schema).toContain("updatedAt");
+    expect(schema).toContain("attachments");
   });
 
-  it("exports taskLogs table with expected columns", () => {
-    expect(taskLogs).toBeDefined();
-    const columnNames = Object.keys(taskLogs);
-    expect(columnNames).toContain("id");
-    expect(columnNames).toContain("taskId");
-    expect(columnNames).toContain("message");
-    expect(columnNames).toContain("level");
+  it("defines TaskLog model with expected fields", () => {
+    expect(schema).toContain("model TaskLog {");
+    expect(schema).toContain("taskId");
+    expect(schema).toContain("message");
+    expect(schema).toContain("level");
   });
 
-  it("exports workspaces table with expected columns", () => {
-    expect(workspaces).toBeDefined();
-    const columnNames = Object.keys(workspaces);
-    expect(columnNames).toContain("id");
-    expect(columnNames).toContain("taskId");
-    expect(columnNames).toContain("coderWorkspaceId");
-    expect(columnNames).toContain("status");
+  it("defines Workspace model with expected fields", () => {
+    expect(schema).toContain("model Workspace {");
+    expect(schema).toContain("taskId");
+    expect(schema).toContain("coderWorkspaceId");
+    expect(schema).toContain("templateType");
+    expect(schema).toContain("status");
   });
 
-  it("defines task_status enum with correct values", () => {
-    expect(taskStatusEnum.enumValues).toEqual([
-      "queued",
-      "running",
-      "verifying",
-      "done",
-      "failed",
-    ]);
+  it("defines TaskStatus enum with correct values", () => {
+    expect(schema).toContain("enum TaskStatus {");
+    for (const val of ["queued", "running", "verifying", "done", "failed"]) {
+      expect(schema).toContain(val);
+    }
   });
 
-  it("defines workspace_status enum with correct values", () => {
-    expect(workspaceStatusEnum.enumValues).toEqual([
-      "pending",
-      "starting",
-      "running",
-      "stopped",
-      "deleted",
-      "failed",
-    ]);
+  it("defines WorkspaceStatus enum with correct values", () => {
+    expect(schema).toContain("enum WorkspaceStatus {");
+    for (const val of ["pending", "starting", "running", "stopped", "deleted", "failed"]) {
+      expect(schema).toContain(val);
+    }
   });
 });
