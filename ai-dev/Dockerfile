@@ -75,7 +75,10 @@ RUN apt-get update \
         fluxbox \
         novnc \
         websockify \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && if [ ! -f /usr/share/novnc/vnc.html ] && [ -f /usr/share/novnc/vnc_lite.html ]; then \
+         ln -s /usr/share/novnc/vnc_lite.html /usr/share/novnc/vnc.html; \
+       fi
 
 # Install Node.js 24 via NodeSource (always available, no nvm dependency)
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \

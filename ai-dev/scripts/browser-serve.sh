@@ -95,6 +95,12 @@ if [ -z "$NOVNC_DIR" ]; then
   wait
 fi
 
+# Ensure vnc.html exists (Ubuntu's novnc package only ships vnc_lite.html)
+if [ ! -f "$NOVNC_DIR/vnc.html" ] && [ -f "$NOVNC_DIR/vnc_lite.html" ]; then
+  ln -sf "$NOVNC_DIR/vnc_lite.html" "$NOVNC_DIR/vnc.html"
+  echo "Created vnc.html symlink -> vnc_lite.html"
+fi
+
 # Start noVNC (WebSocket proxy for web browser access)
 websockify --web="$NOVNC_DIR" "${NOVNC_PORT}" "localhost:${VNC_PORT}" \
   > "$LOG_DIR/novnc.log" 2>&1 &
