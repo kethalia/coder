@@ -3,6 +3,7 @@ import type {
   CoderWorkspace,
   CreateWorkspaceRequest,
   WaitForBuildOptions,
+  WorkspaceResource,
 } from "./types";
 
 /**
@@ -155,6 +156,37 @@ export class CoderClient {
 
     throw new Error(
       `[coder] Timeout waiting for workspace ${workspaceId} to reach "${targetStatus}" after ${timeoutMs}ms`
+    );
+  }
+
+  /**
+   * Fetch provisioned resources (and their agents) for a workspace's latest build.
+   */
+  async getWorkspaceResources(workspaceId: string): Promise<WorkspaceResource[]> {
+    const ws = await this.getWorkspace(workspaceId);
+    const buildId = ws.latest_build.id;
+    return this.request<WorkspaceResource[]>(
+      `/api/v2/workspacebuilds/${buildId}/resources`
+    );
+  }
+
+  /**
+   * Resolve the SSH-addressable agent name for a workspace.
+   * Returns `<workspace_name>.<agent_name>` — the format `coder ssh` expects.
+   * Throws if the workspace has no agents.
+   */
+  async getWorkspaceAgentName(workspaceId: string): Promise<string> {
+    const ws = await this.getWorkspace(workspaceId);
+    const resources = await this.request<WorkspaceResource[]>(
+      `/api/v2/workspacebuilds/${ws.latest_build.id}/resources`
+    );
+    for (const resource of resources) {
+      if (resource.agents && resource.agents.length > 0) {
+        return `${ws.name}.${resource.agents[0].name}`;
+      }
+    }
+    throw new Error(
+      `[coder] No agents found for workspace ${workspaceId} — cannot resolve SSH target`
     );
   }
 

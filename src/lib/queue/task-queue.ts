@@ -2,6 +2,12 @@ import { Queue, Worker, type Job } from "bullmq";
 import { getRedisConnection } from "./connection";
 import { getDb } from "@/lib/db";
 import type { CoderClient } from "@/lib/coder/client";
+import { runBlueprint } from "@/lib/blueprint/runner";
+import { createHydrateStep } from "@/lib/blueprint/steps/hydrate";
+import { createRulesStep } from "@/lib/blueprint/steps/rules";
+import { createToolsStep } from "@/lib/blueprint/steps/tools";
+import { createAgentStep } from "@/lib/blueprint/steps/agent";
+import type { BlueprintContext } from "@/lib/blueprint/types";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -35,6 +41,9 @@ export function getTaskQueue(): Queue<TaskJobData> {
 
 // ── Worker ────────────────────────────────────────────────────────
 
+/** 35 minutes — longer than the agent's 30-min timeout. */
+const JOB_TIMEOUT_MS = 35 * 60 * 1_000;
+
 /**
  * Creates a BullMQ worker that processes task-dispatch jobs.
  *
@@ -42,7 +51,10 @@ export function getTaskQueue(): Queue<TaskJobData> {
  *   1. Updates task status to 'running'
  *   2. Calls CoderClient.createWorkspace with the worker template
  *   3. Records the workspace in Postgres
- *   4. Logs the outcome to taskLogs
+ *   4. Waits for workspace build to reach 'running'
+ *   5. Resolves the SSH-addressable agent name
+ *   6. Runs the full blueprint: hydrate → rules → tools → agent
+ *   7. Updates task status to 'done' or 'failed' based on result
  *
  * On error: sets task status to 'failed' and logs the error.
  *
@@ -52,6 +64,8 @@ export function getTaskQueue(): Queue<TaskJobData> {
 export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> {
   const concurrency = parseInt(process.env.WORKER_CONCURRENCY ?? "5", 10);
   const templateId = process.env.CODER_WORKER_TEMPLATE_ID ?? "";
+  const piProvider = process.env.PI_PROVIDER ?? "anthropic";
+  const piModel = process.env.PI_MODEL ?? "claude-sonnet-4-20250514";
 
   const worker = new Worker<TaskJobData>(
     QUEUE_NAME,
@@ -92,7 +106,7 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
           },
         });
 
-        // 4. Log success
+        // 4. Log workspace creation
         await db.taskLog.create({
           data: {
             taskId,
@@ -100,6 +114,111 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
             level: "info",
           },
         });
+
+        // 5. Wait for workspace build to reach 'running' (5-min timeout)
+        console.log(`[queue] Waiting for workspace build to complete (task=${taskId})`);
+        await coderClient.waitForBuild(workspace.id, "running", {
+          timeoutMs: 300_000,
+        });
+
+        // 6. Update workspace status to 'running'
+        await db.workspace.update({
+          where: { coderWorkspaceId: workspace.id },
+          data: { status: "running" },
+        });
+
+        await db.taskLog.create({
+          data: {
+            taskId,
+            message: "Workspace build completed — status: running",
+            level: "info",
+          },
+        });
+
+        console.log(`[queue] Workspace build complete for task ${taskId}`);
+
+        // 7. Resolve SSH agent name
+        const agentName = await coderClient.getWorkspaceAgentName(workspace.id);
+        console.log(`[queue] Resolved agent name: ${agentName} (task=${taskId})`);
+
+        // 8. Build blueprint context
+        const ctx: BlueprintContext = {
+          taskId,
+          workspaceName: agentName,
+          repoUrl,
+          prompt,
+          branchName,
+          assembledContext: "",
+          scopedRules: "",
+          toolFlags: [],
+          piProvider,
+          piModel,
+        };
+
+        // 9. Run the full blueprint: hydrate → rules → tools → agent
+        const steps = [
+          createHydrateStep(),
+          createRulesStep(),
+          createToolsStep(),
+          createAgentStep(),
+        ];
+
+        console.log(`[queue] Starting blueprint for task ${taskId}`);
+
+        const result = await runBlueprint(steps, ctx);
+
+        // 10. Log each step outcome
+        for (const step of result.steps) {
+          await db.taskLog.create({
+            data: {
+              taskId,
+              message: `Blueprint step "${step.name}": ${step.status} — ${step.message}`,
+              level: step.status === "failure" ? "error" : "info",
+            },
+          });
+        }
+
+        // 11. Update task status based on result
+        if (result.success) {
+          await db.task.update({
+            where: { id: taskId },
+            data: { status: "done" },
+          });
+
+          console.log(`[task] Task ${taskId} status → done (${result.totalDurationMs}ms)`);
+
+          await db.taskLog.create({
+            data: {
+              taskId,
+              message: `Blueprint completed successfully in ${result.totalDurationMs}ms`,
+              level: "info",
+            },
+          });
+        } else {
+          // Find the failed step for the error message
+          const failedStep = result.steps.find((s) => s.status === "failure");
+          const errorMessage = failedStep
+            ? `Blueprint failed at step "${failedStep.name}": ${failedStep.message}`
+            : "Blueprint failed (unknown step)";
+
+          await db.task.update({
+            where: { id: taskId },
+            data: {
+              status: "failed",
+              errorMessage,
+            },
+          });
+
+          console.log(`[task] Task ${taskId} status → failed: ${errorMessage}`);
+
+          await db.taskLog.create({
+            data: {
+              taskId,
+              message: errorMessage,
+              level: "error",
+            },
+          });
+        }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -133,6 +252,7 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
     {
       connection: getRedisConnection(),
       concurrency,
+      lockDuration: JOB_TIMEOUT_MS,
     }
   );
 

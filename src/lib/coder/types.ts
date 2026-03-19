@@ -56,3 +56,18 @@ export interface WaitForBuildOptions {
   timeoutMs?: number;
   intervalMs?: number;
 }
+
+/** An agent running inside a workspace resource (from build resources endpoint). */
+export interface WorkspaceAgent {
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** A resource provisioned by a workspace build (compute, volume, etc.). */
+export interface WorkspaceResource {
+  id: string;
+  name: string;
+  type: string;
+  agents?: WorkspaceAgent[];
+}
