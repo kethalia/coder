@@ -262,6 +262,15 @@ resource "coder_script" "tools_ai" {
   })
 }
 
+resource "coder_script" "tools_browser" {
+  agent_id           = coder_agent.main.id
+  display_name       = "Browser Vision"
+  icon               = "/icon/terminal.svg"
+  run_on_start       = true
+  start_blocks_login = true
+  script             = file("${path.module}/scripts/tools-browser.sh")
+}
+
 resource "coder_script" "symlinks" {
   agent_id           = coder_agent.main.id
   display_name       = "Tool Symlinks"

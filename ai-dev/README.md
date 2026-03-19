@@ -10,6 +10,7 @@ A production-ready Coder template for AI-assisted full-stack development. Featur
 - **Pi** - Minimal terminal coding agent with extension support
 - **GSD (get-shit-done)** - Meta-prompting system for Claude Code and OpenCode
 - **GSD-2** - Autonomous development agent for Pi
+- **Browser Vision** - All agents can see what they're developing in a headless browser
 - All AI tools are configurable via template variables
 
 ### Development Environment
@@ -68,6 +69,8 @@ yarn --version            # Yarn
 forge --version           # Foundry
 gh auth status            # GitHub CLI
 starship --version        # Starship prompt
+chromium-browser --version # Headless browser
+browser-screenshot --help  # Screenshot tool
 ```
 
 ## Configuration
@@ -112,6 +115,7 @@ cpu_shares  = 6144    # 6 CPU cores (relative weight)
 |  |  - OpenCode (CLI + web UI :62748)      |  |
 |  |  - Pi (terminal)                       |  |
 |  |  - GSD / GSD-2 (slash commands)        |  |
+|  |  - Playwright MCP (browser vision)     |  |
 |  +----------------------------------------+  |
 |                                              |
 |  +----------------------------------------+  |
@@ -149,6 +153,42 @@ cpu_shares  = 6144    # 6 CPU cores (relative weight)
 | Claude Code | Web app via module | Claude Code web interface |
 | Pi Agent | Terminal app | Pi in a terminal window |
 | File Browser | Subdomain | Web-based file management |
+
+## Browser Vision
+
+All AI agents can visually inspect what they're developing via a headless Chromium browser.
+
+### How It Works
+
+| Agent | Method | Capabilities |
+|-------|--------|--------------|
+| Claude Code | Playwright MCP server | Navigate, screenshot, click, type, inspect elements |
+| OpenCode | Playwright MCP server | Navigate, screenshot, click, type, inspect elements |
+| Pi | `browser-screenshot` / `browser-html` CLI tools | Screenshot any URL, dump rendered HTML |
+| GSD / GSD-2 | Inherits from parent agent | Same as Claude Code, OpenCode, or Pi |
+
+### Usage Examples
+
+**Claude Code & OpenCode** (automatic via MCP — just ask the agent):
+```
+> Take a screenshot of http://localhost:3000 and tell me what you see
+> Navigate to my app and check if the login form renders correctly
+> Click the submit button and screenshot the result
+```
+
+**Pi & GSD-2** (via CLI tools):
+```bash
+browser-screenshot http://localhost:3000              # Screenshot → /tmp/screenshot-*.png
+browser-screenshot http://localhost:3000 ./output.png # Screenshot → custom path
+browser-html http://localhost:3000                    # Dump rendered DOM as text
+```
+
+### Configuration
+
+The Playwright MCP server is auto-configured for Claude Code (`~/.claude/settings.json`) and OpenCode (`~/.config/opencode/config.json`) during workspace startup. Browser tools use the system Chromium at `/usr/bin/chromium-browser`.
+
+Environment variables:
+- `BROWSER_VIEWPORT` - Screenshot viewport size (default: `1280x720`)
 
 ## Troubleshooting
 

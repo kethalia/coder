@@ -59,6 +59,20 @@ RUN apt-get update \
         zsh \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Chromium and dependencies for headless browser (AI agent vision)
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        chromium-browser \
+        fonts-liberation \
+        fonts-noto-color-emoji \
+        libgbm1 \
+        libnss3 \
+        libatk-bridge2.0-0 \
+        libgtk-3-0 \
+        libasound2t64 \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Node.js 24 via NodeSource (always available, no nvm dependency)
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
