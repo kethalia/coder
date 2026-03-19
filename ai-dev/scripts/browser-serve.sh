@@ -23,16 +23,22 @@ if [ "$READY" = "false" ]; then
   echo "Docker image needs rebuilding with the latest Dockerfile."
   echo "Browser vision web UI will not be available this session."
   echo "Headless mode (Playwright MCP) still works for AI agents."
-  # Keep the script alive so Coder doesn't mark it as failed
   sleep infinity &
   wait
 fi
 
-# Kill any existing instances
-pkill -f "Xvfb :${DISPLAY_NUM}" 2>/dev/null || true
-pkill -f "fluxbox" 2>/dev/null || true
-pkill -f "x11vnc.*:${DISPLAY_NUM}" 2>/dev/null || true
-pkill -f "websockify.*${NOVNC_PORT}" 2>/dev/null || true
+# Kill any existing instances (exclude our own PID to avoid self-kill)
+# NOTE: pkill -f matches against full cmdline — since Coder may run scripts
+# via bash -c '<content>', the script text itself would match. We must
+# exclude our own process tree.
+MYPID=$$
+for pattern in "Xvfb.*:${DISPLAY_NUM}" "fluxbox" "x11vnc.*:${DISPLAY_NUM}" "websockify.*${NOVNC_PORT}"; do
+  pgrep -f "$pattern" 2>/dev/null | while read pid; do
+    if [ "$pid" != "$MYPID" ] && [ "$pid" != "1" ]; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+done
 sleep 1
 
 # Start Xvfb (virtual framebuffer)
@@ -86,7 +92,6 @@ fi
 if [ -z "$NOVNC_DIR" ]; then
   echo "WARNING: noVNC web directory not found"
   echo "VNC is still accessible directly on port ${VNC_PORT}"
-  # Keep alive — VNC still works even without the web UI
   wait
 fi
 
@@ -107,5 +112,5 @@ else
   cat "$LOG_DIR/novnc.log" 2>/dev/null || true
 fi
 
-# Keep script alive (Coder marks non-blocking scripts as failed if they exit)
+# Keep script alive
 wait
