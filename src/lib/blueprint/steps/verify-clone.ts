@@ -8,6 +8,13 @@ const PROJECT_DIR = "/home/coder/project";
  *
  * Clones the repository and checks out the PR branch inside the
  * verifier workspace so subsequent steps can inspect the code.
+ *
+ * Idempotent: if the project directory already exists (e.g. from
+ * the template init.sh), fetches and resets to the target branch
+ * instead of cloning again.
+ *
+ * Uses base64 encoding for repoUrl and branchName to prevent
+ * shell injection (these originate from job input).
  */
 export function createVerifyCloneStep(): BlueprintStep {
   return {
@@ -15,7 +22,24 @@ export function createVerifyCloneStep(): BlueprintStep {
     async execute(ctx) {
       const start = Date.now();
 
-      const cloneCmd = `gh repo clone ${ctx.repoUrl} ${PROJECT_DIR} && cd ${PROJECT_DIR} && git checkout ${ctx.branchName}`;
+      // Base64-encode user-controlled values to prevent shell injection
+      const repoUrlB64 = Buffer.from(ctx.repoUrl, "utf-8").toString("base64");
+      const branchB64 = Buffer.from(ctx.branchName, "utf-8").toString("base64");
+
+      const cloneCmd = [
+        `REPO_URL="$(echo '${repoUrlB64}' | base64 -d)"`,
+        `BRANCH="$(echo '${branchB64}' | base64 -d)"`,
+        `if [ ! -d "${PROJECT_DIR}" ]; then`,
+        `  gh repo clone "$REPO_URL" ${PROJECT_DIR} &&`,
+        `  cd ${PROJECT_DIR} &&`,
+        `  git checkout "$BRANCH"`,
+        `else`,
+        `  cd ${PROJECT_DIR} &&`,
+        `  git fetch origin &&`,
+        `  git checkout "$BRANCH" &&`,
+        `  git reset --hard "origin/$BRANCH"`,
+        `fi`,
+      ].join("\n");
 
       const result = await execInWorkspace(ctx.workspaceName, cloneCmd);
 

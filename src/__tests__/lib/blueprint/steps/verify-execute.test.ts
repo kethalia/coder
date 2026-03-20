@@ -55,6 +55,7 @@ describe("createVerifyExecuteStep", () => {
     // Check intermediate data stored on ctx
     const intermediate = JSON.parse(ctx.verificationReport!);
     expect(intermediate.outcome).toBe("pass");
+    expect(typeof intermediate.durationMs).toBe("number");
 
     // Should use 120s timeout
     expect(mockExec).toHaveBeenCalledWith(

@@ -217,8 +217,8 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
             },
           });
 
-          // 12. Trigger verifier if PR was created
-          if (ctx.prUrl) {
+          // 12. Trigger verifier if PR was created and verifier template is configured
+          if (ctx.prUrl && verifierTemplateId) {
             console.log(`[queue] Starting verifier for task ${taskId}`);
 
             try {
@@ -271,22 +271,43 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
 
               // Run verifier blueprint
               const verifierSteps = createVerifierBlueprint();
-              await runBlueprint(verifierSteps, verifierCtx);
+              const verifierResult = await runBlueprint(verifierSteps, verifierCtx);
 
-              // Persist verification report
-              const report = verifierCtx.verificationReport
-                ? JSON.parse(verifierCtx.verificationReport) as VerificationReport
-                : null;
+              if (!verifierResult.success) {
+                // Verifier ran but a step failed — persist inconclusive report
+                const inconclusiveReport: VerificationReport = {
+                  strategy: "none",
+                  outcome: "inconclusive",
+                  logs: "Verifier blueprint reported step failure",
+                  durationMs: verifierResult.totalDurationMs,
+                  timestamp: new Date().toISOString(),
+                };
 
-              await db.task.update({
-                where: { id: taskId },
-                data: {
-                  status: "done",
-                  verificationReport: report ?? undefined,
-                },
-              });
+                await db.task.update({
+                  where: { id: taskId },
+                  data: {
+                    status: "done",
+                    verificationReport: inconclusiveReport as any,
+                  },
+                });
 
-              console.log(`[task] Task ${taskId} status → done (verified)`);
+                console.log(`[task] Task ${taskId} status → done (verification inconclusive — step failure)`);
+              } else {
+                // Persist verification report from successful verifier run
+                const report = verifierCtx.verificationReport
+                  ? JSON.parse(verifierCtx.verificationReport) as VerificationReport
+                  : null;
+
+                await db.task.update({
+                  where: { id: taskId },
+                  data: {
+                    status: "done",
+                    verificationReport: report ?? undefined,
+                  },
+                });
+
+                console.log(`[task] Task ${taskId} status → done (verified)`);
+              }
             } catch (verifierError) {
               // Verifier failure is informational — PR still exists
               const verifierMsg = verifierError instanceof Error
@@ -313,6 +334,25 @@ export function createTaskWorker(coderClient: CoderClient): Worker<TaskJobData> 
 
               console.log(`[task] Task ${taskId} status → done (verification inconclusive)`);
             }
+          } else if (ctx.prUrl && !verifierTemplateId) {
+            // PR was created but no verifier template configured — skip verification
+            const skipReport: VerificationReport = {
+              strategy: "none",
+              outcome: "inconclusive",
+              logs: "CODER_VERIFIER_TEMPLATE_ID not set — verification skipped",
+              durationMs: 0,
+              timestamp: new Date().toISOString(),
+            };
+
+            await db.task.update({
+              where: { id: taskId },
+              data: {
+                status: "done",
+                verificationReport: skipReport as any,
+              },
+            });
+
+            console.log(`[task] Task ${taskId} status → done (verifier template not configured)`);
           } else {
             console.log(`[task] Task ${taskId} status → done (${result.totalDurationMs}ms)`);
           }

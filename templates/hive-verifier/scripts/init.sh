@@ -30,18 +30,15 @@ if [ ! -f ~/.workspace_initialized ]; then
 
 ## Quick Start Guide
 
-### AI-Assisted Development
-- **Claude Code**: `claude` in terminal or use the web app
-- **OpenCode**: `opencode` in terminal or use the web UI
-- **Pi**: `pi` in terminal
-- **GSD (Claude/OpenCode)**: `/gsd:help` inside Claude Code or OpenCode
-- **GSD (Pi)**: `/gsd help` inside Pi
+### Verification Environment
+This is a **verifier workspace** — it runs deterministic checks (tests, linting, builds)
+against PR branches. No AI tools are installed.
 
 ### Available Tools & Versions
 - **Node.js**: v24 (default), also available: 18, 20, 22
 - **Package Managers**: PNPM, Yarn, Bun
 - **Docker & Docker Compose**: Latest
-- **Foundry**: Ethereum development toolkit
+- **Chrome/Chromium**: Headless browser for E2E and screenshot verification
 - **act**: Run GitHub Actions locally
 
 ### Shell
@@ -50,17 +47,16 @@ if [ ! -f ~/.workspace_initialized ]; then
 - **direnv** for per-project env management
 
 ### Browser Vision
-All AI agents can see what you're developing in a browser:
-- **Claude Code & OpenCode**: Just ask! (e.g. "screenshot localhost:3000")
-- **Pi**: Use \`browser-screenshot <url>\` or \`browser-html <url>\`
+- **browser-screenshot**: `browser-screenshot <url> [output-path]`
+- **browser-html**: `browser-html <url>`
 
 ### Useful Commands
 
 ```bash
-# AI Agents
-claude                       # Start Claude Code
-opencode                     # Start OpenCode
-pi                           # Start Pi coding agent
+# Verification
+npm test                     # Run tests
+npm run build                # Build project
+npm run lint                 # Run linter
 
 # Docker
 docker ps                    # List running containers
@@ -74,8 +70,6 @@ bun install                  # Install with Bun
 
 # Git
 gs                           # git status
-gco -b feature/new           # Create branch
-gc -m "message"              # Commit
 git lg                       # Pretty log
 ```
 

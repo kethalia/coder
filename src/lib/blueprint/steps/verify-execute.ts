@@ -14,8 +14,8 @@ const SERVER_TIMEOUT_MS = 90_000;
 const CURL_RETRY_CMD =
   "bash -c 'for i in $(seq 1 30); do curl -sf http://localhost:3000 && exit 0; sleep 2; done; exit 1'";
 
-/** Screenshot command for web verification. */
-const SCREENSHOT_CMD = "browser-screenshot http://localhost:3000 --output /tmp/verification.png";
+/** Screenshot command for web verification (positional args: url, output-path). */
+const SCREENSHOT_CMD = "browser-screenshot http://localhost:3000 /tmp/verification.png";
 
 /**
  * Create the verify-execute step.
@@ -110,11 +110,13 @@ export function createVerifyExecuteStep(): BlueprintStep {
         }
       }
 
-      // Store intermediate data for the report step
-      ctx.verificationReport = JSON.stringify({ outcome, logs });
+      const durationMs = Date.now() - start;
+
+      // Store intermediate data for the report step (including execution duration)
+      ctx.verificationReport = JSON.stringify({ outcome, logs, durationMs });
 
       console.log(`[blueprint] verify-execute: ${msg} (task=${ctx.taskId})`);
-      return { status: "success", message: msg, durationMs: Date.now() - start };
+      return { status: "success", message: msg, durationMs };
     },
   };
 }

@@ -29,7 +29,7 @@ describe("createVerifyReportStep", () => {
     const step = createVerifyReportStep();
     const ctx = makeCtx({
       verificationStrategy: "test-suite",
-      verificationReport: JSON.stringify({ outcome: "pass", logs: "All tests passed" }),
+      verificationReport: JSON.stringify({ outcome: "pass", logs: "All tests passed", durationMs: 5000 }),
     });
 
     const result = await step.execute(ctx);
@@ -42,13 +42,15 @@ describe("createVerifyReportStep", () => {
     expect(report.strategy).toBe("test-suite");
     expect(report.outcome).toBe("pass");
     expect(report.logs).toBe("All tests passed");
+    // durationMs should come from the execute step, not report step timing
+    expect(report.durationMs).toBe(5000);
   });
 
   it("report includes timestamp and duration", async () => {
     const step = createVerifyReportStep();
     const ctx = makeCtx({
       verificationStrategy: "web-app",
-      verificationReport: JSON.stringify({ outcome: "pass", logs: "" }),
+      verificationReport: JSON.stringify({ outcome: "pass", logs: "", durationMs: 1234 }),
     });
 
     const result = await step.execute(ctx);
@@ -59,6 +61,7 @@ describe("createVerifyReportStep", () => {
     // Verify it's a valid ISO date
     expect(new Date(report.timestamp).toISOString()).toBe(report.timestamp);
     expect(typeof report.durationMs).toBe("number");
+    expect(report.durationMs).toBe(1234);
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 

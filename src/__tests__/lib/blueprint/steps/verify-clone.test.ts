@@ -51,8 +51,31 @@ describe("createVerifyCloneStep", () => {
     expect(result.status).toBe("success");
     expect(result.message).toContain("Cloned and checked out fix/bug-123");
     expect(mockExec).toHaveBeenCalledOnce();
-    expect(mockExec.mock.calls[0][1]).toContain("gh repo clone");
-    expect(mockExec.mock.calls[0][1]).toContain("git checkout fix/bug-123");
+
+    // Verify base64-encoded values are in the command (injection prevention)
+    const cmd = mockExec.mock.calls[0][1];
+    const repoB64 = Buffer.from("https://github.com/org/repo").toString("base64");
+    const branchB64 = Buffer.from("fix/bug-123").toString("base64");
+    expect(cmd).toContain(repoB64);
+    expect(cmd).toContain(branchB64);
+    expect(cmd).toContain("base64 -d");
+  });
+
+  it("command is idempotent — handles existing project directory", async () => {
+    mockExec.mockResolvedValue(ok("Already up to date."));
+
+    const step = createVerifyCloneStep();
+    const ctx = makeCtx();
+    const result = await step.execute(ctx);
+
+    expect(result.status).toBe("success");
+
+    // Verify the command includes both clone and fetch/reset paths
+    const cmd = mockExec.mock.calls[0][1];
+    expect(cmd).toContain("if [ ! -d");
+    expect(cmd).toContain("gh repo clone");
+    expect(cmd).toContain("git fetch origin");
+    expect(cmd).toContain("git reset --hard");
   });
 
   it("returns failure when repo is not found", async () => {
@@ -77,5 +100,22 @@ describe("createVerifyCloneStep", () => {
     expect(result.status).toBe("failure");
     expect(result.message).toContain("Clone/checkout failed");
     expect(result.message).toContain("nonexistent-branch");
+  });
+
+  it("does not interpolate repoUrl or branchName directly into shell", async () => {
+    // Malicious input that would break shell if not base64-encoded
+    mockExec.mockResolvedValue(ok(""));
+
+    const step = createVerifyCloneStep();
+    const ctx = makeCtx({
+      repoUrl: "https://github.com/org/repo; rm -rf /",
+      branchName: "branch$(whoami)",
+    });
+    await step.execute(ctx);
+
+    // The raw malicious strings should NOT appear in the command
+    const cmd = mockExec.mock.calls[0][1];
+    expect(cmd).not.toContain("rm -rf /");
+    expect(cmd).not.toContain("$(whoami)");
   });
 });

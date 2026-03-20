@@ -179,6 +179,8 @@ describe("BullMQ task-dispatch queue", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // Set verifier template ID so verifier path is exercised
+    process.env.CODER_VERIFIER_TEMPLATE_ID = "tmpl-verifier";
   });
 
   describe("getTaskQueue()", () => {
@@ -668,6 +670,100 @@ describe("BullMQ task-dispatch queue", () => {
       expect(mockCleanupWorkspace).toHaveBeenCalledWith(
         client, "ws-verifier-001", expect.any(Number), expect.anything(),
       );
+    });
+
+    it("verifier blueprint returns success:false → task done with inconclusive report", async () => {
+      const createWsMock = vi.fn()
+        .mockResolvedValueOnce({
+          id: "ws-001", name: "hive-worker-abc12345",
+          template_id: "tmpl-1", owner_name: "me",
+          latest_build: { id: "build-1", status: "starting", job: { status: "running", error: "" } },
+        })
+        .mockResolvedValueOnce({
+          id: "ws-verifier-001", name: "hive-verifier-abc12345",
+          template_id: "tmpl-v", owner_name: "me",
+          latest_build: { id: "build-v1", status: "starting", job: { status: "running", error: "" } },
+        });
+      const client = makeMockCoderClient({ createWorkspace: createWsMock });
+
+      let callCount = 0;
+      mockRunBlueprint.mockImplementation(async (steps: any[], ctx: any) => {
+        callCount++;
+        if (callCount === 1) {
+          ctx.prUrl = "https://github.com/test/repo/pull/42";
+          return makeSuccessResult();
+        }
+        // Verifier blueprint returns failure (does NOT throw)
+        return {
+          success: false,
+          steps: [
+            { name: "verify-clone", status: "success", message: "ok", durationMs: 100 },
+            { name: "verify-detect", status: "success", message: "ok", durationMs: 50 },
+            { name: "verify-execute", status: "failure", message: "npm test failed", durationMs: 5000 },
+            { name: "verify-report", status: "skipped", message: "skipped", durationMs: 0 },
+          ],
+          totalDurationMs: 5150,
+        };
+      });
+
+      createTaskWorker(client);
+      const processor = (Worker as any).__lastProcessor;
+      await processor({ id: "job-verifier-step-fail", data: fakeJobData });
+
+      // Task should be done with inconclusive report (not failed)
+      expect(mockTaskUpdate).toHaveBeenCalledWith({
+        where: { id: fakeJobData.taskId },
+        data: {
+          status: "done",
+          verificationReport: expect.objectContaining({
+            outcome: "inconclusive",
+            logs: "Verifier blueprint reported step failure",
+          }),
+        },
+      });
+
+      // Task NOT set to failed
+      const failCall = mockTaskUpdate.mock.calls.find(
+        (c: any) => c[0]?.data?.status === "failed"
+      );
+      expect(failCall).toBeUndefined();
+    });
+
+    it("missing CODER_VERIFIER_TEMPLATE_ID → verification skipped with inconclusive report", async () => {
+      // Unset the verifier template ID
+      delete process.env.CODER_VERIFIER_TEMPLATE_ID;
+
+      const client = makeMockCoderClient();
+
+      let callCount = 0;
+      mockRunBlueprint.mockImplementation(async (steps: any[], ctx: any) => {
+        callCount++;
+        ctx.prUrl = "https://github.com/test/repo/pull/42";
+        return makeSuccessResult();
+      });
+
+      createTaskWorker(client);
+      const processor = (Worker as any).__lastProcessor;
+      await processor({ id: "job-no-template", data: fakeJobData });
+
+      // Verifier should NOT be triggered
+      expect(mockRunBlueprint).toHaveBeenCalledTimes(1);
+      expect(mockCreateVerifierBlueprint).not.toHaveBeenCalled();
+
+      // Task set to done with inconclusive report mentioning missing env var
+      expect(mockTaskUpdate).toHaveBeenCalledWith({
+        where: { id: fakeJobData.taskId },
+        data: {
+          status: "done",
+          verificationReport: expect.objectContaining({
+            outcome: "inconclusive",
+            logs: expect.stringContaining("CODER_VERIFIER_TEMPLATE_ID"),
+          }),
+        },
+      });
+
+      // Only one workspace created (worker, not verifier)
+      expect(client.createWorkspace).toHaveBeenCalledTimes(1);
     });
   });
 });

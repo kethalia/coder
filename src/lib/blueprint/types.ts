@@ -1,3 +1,5 @@
+import type { VerificationStrategy } from "@/lib/verification/report";
+
 /**
  * Shared types for the blueprint execution system.
  *
@@ -27,7 +29,7 @@ export interface BlueprintContext {
   /** PR URL set by the PR creation step (read by worker for persistence). */
   prUrl?: string;
   /** Verification strategy detected by the verifier (set during verify-detect step). */
-  verificationStrategy?: string;
+  verificationStrategy?: VerificationStrategy;
   /** Structured verification report JSON (set during verify-report step). */
   verificationReport?: string;
 }

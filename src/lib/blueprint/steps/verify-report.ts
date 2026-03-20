@@ -20,11 +20,16 @@ export function createVerifyReportStep(): BlueprintStep {
       let outcome: VerificationOutcome = "inconclusive";
       let logs = "";
 
+      let executionDurationMs: number | undefined;
+
       if (ctx.verificationReport) {
         try {
           const intermediate = JSON.parse(ctx.verificationReport);
           outcome = intermediate.outcome ?? "inconclusive";
           logs = intermediate.logs ?? "";
+          if (typeof intermediate.durationMs === "number") {
+            executionDurationMs = intermediate.durationMs;
+          }
         } catch {
           // If parsing fails, report inconclusive with a note
           logs = "Failed to parse intermediate verification data";
@@ -35,7 +40,8 @@ export function createVerifyReportStep(): BlueprintStep {
         strategy,
         outcome,
         logs,
-        durationMs: Date.now() - start,
+        // Use actual execution duration from verify-execute, fall back to report step time
+        durationMs: executionDurationMs ?? (Date.now() - start),
         timestamp: new Date().toISOString(),
       };
 
